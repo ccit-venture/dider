@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Dokumentasi
+    url: https://github.com/ccit-venture/dider/blob/master/README.md
+    about: Baca dokumentasi proyek sebelum membuka issue.
+  - name: 🔒 Laporan Keamanan
+    url: https://github.com/ccit-venture/dider/security/advisories
+    about: Jangan buka issue publik untuk kerentanan — lihat SECURITY.md.
