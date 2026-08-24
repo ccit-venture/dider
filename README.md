@@ -4,7 +4,7 @@
 > diekspor ke PDF. Terinspirasi dari [pubhtml5.com](https://pubhtml5.com/).
 
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
-![Stack](https://img.shields.io/badge/stack-Bun%20%7C%20Hono%20%7C%20SQLite-blue)
+![Stack](https://img.shields.io/badge/stack-Bun%20%7C%20Hono%20%7C%20Eta%20%7C%20SQLite-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ---
@@ -18,25 +18,30 @@ Dider hadir sebagai editor berbasis web yang ringan: susun **halaman** dari
 
 ## Arsitektur
 
-Alur: View (frontend statis) → fetch ke API (Hono) → Controller → Model → SQLite.
+Server-rendered MVC (gaya Laravel): Hono controller mengembalikan **view Eta**
+(HTML), semua submit via **form POST** + redirect (PRG). Tidak ada JSON API
+terpisah.
 
 ```mermaid
 flowchart LR
-    Browser["Browser<br/>public/ · editor + vanilla JS + Tailwind"]
-    API["Hono API<br/>/api/* · Middleware auth/session"]
-    Ctrl["Controllers<br/>project"]
-    Model["Models<br/>project · session"]
+    Browser["Browser<br/>form POST · Tailwind + vanilla JS"]
+    Web["Hono Web Routes<br/>/ · /admin/*"]
+    Ctrl["Controllers<br/>auth · page · project"]
+    Model["Models<br/>user · session · project"]
+    View["Eta Views<br/>views/ · layouts + partials"]
     DB[("SQLite<br/>data/app.db")]
 
-    Browser -->|fetch / autosave| API
-    API --> Ctrl
+    Browser -->|POST form| Web
+    Web --> Ctrl
     Ctrl --> Model
     Model --> DB
-    DB --> Browser
+    Ctrl --> View
+    View --> Browser
 ```
 
 **Keamanan terpasang:** cookie session `httpOnly` + `sameSite=Lax`, password
-di-hash argon2 (`Bun.password`), `hono/csrf` + `secureHeaders` + `cors`.
+di-hash argon2 (`Bun.password`), `hono/csrf` (origin) di semua request,
+escape default Eta (`<%=`).
 
 ---
 
@@ -48,20 +53,26 @@ dider/
 │   ├── index.ts                # entry: server Bun (port 3000, hot reload)
 │   ├── app.ts                  # build Hono app + middleware global + static
 │   ├── db.ts                   # koneksi DB (sqlite | supabase) + migrasi
+│   ├── view.ts                 # setup Eta + helper view()/redirect()/flash
 │   ├── models/                 # MODEL — akses data / query SQL
-│   │   ├── project.model.ts    #   projects: create, list, findById, update
-│   │   └── session.model.ts    #   sessions: create/find/delete session cookie
-│   ├── controllers/            # CONTROLLER — parse request → model → response
-│   │   └── project.controller.ts # /api/projects: CRUD dokumen/majalah
+│   │   ├── user.model.ts       #   users: register, verifyPassword (argon2)
+│   │   ├── session.model.ts    #   sessions: create/find/delete session cookie
+│   │   └── project.model.ts    #   projects: create, list, findById, update, delete
+│   ├── controllers/            # CONTROLLER — form POST → model → view/redirect
+│   │   ├── auth.controller.ts  #   /admin/login, /admin/register, /admin/logout
+│   │   ├── page.controller.ts  #   GET / (homepage publik)
+│   │   └── project.controller.ts # /admin/editor* — CRUD proyek (auth)
 │   ├── middleware/
-│   │   └── auth.middleware.ts  # session cookie helpers + requireAuth
-│   ├── routes/
-│   │   └── index.ts            # router: pasang controller ke /api/*
-│   └── styles/input.css        # sumber Tailwind (compile → public/style.css)
-├── public/                     # VIEW — HTML statis + vanilla JS + CSS hasil
-│   ├── index.html              #   landing
-│   ├── app.js                  #   fetch ke API
-│   └── style.css               #   hasil compile Tailwind (jangan diedit manual)
+│   │   ├── auth.middleware.ts  # session helpers + requireAuth + guest
+│   │   └── locals.middleware.ts # inject user login + flash ke context
+│   └── routes/
+│       └── web.ts              # router web: pasang controller + injectLocals
+├── views/                      # VIEW — template Eta (Blade/EJS-like)
+│   ├── layouts/                #   layout admin & homepage
+│   ├── partials/               #   navbar + error list
+│   ├── admin/                  #   tampilan admin (auth + editor)
+│   └── homepage/               #   tampilan depan user
+├── public/                     # aset statis (style.css Tailwind, editor.js)
 ├── supabase/migrations/        # skema SQL versi Supabase (opsional)
 ├── test/                       # unit test (`bun test`, SQLite in-memory)
 └── .github/                    # template issue/PR + CI
@@ -81,17 +92,25 @@ Build CSS produksi: `bun run build:css` — hasilnya `public/style.css`.
 
 ---
 
-## API
+## Rute
 
-| Method | Endpoint | Deskripsi | Auth |
-|--------|----------|-----------|------|
-| GET | `/api/ping` | Health check API | - |
-| POST | `/api/projects` | Simpan proyek `{nama, ukuran, halaman}` | ✓ |
-| GET | `/api/projects` | Daftar proyek ringkas | - |
-| GET | `/api/projects/:id` | Ambil satu proyek lengkap (buka editor) | - |
-| PUT | `/api/projects/:id` | Update/autosave proyek | ✓ |
+| Method | Path | View / Aksi | Auth |
+|--------|------|-------------|------|
+| GET | `/` | `homepage/index` — landing | - |
+| GET | `/health` | health check | - |
+| GET | `/admin/login` | `admin/auth/login` | guest |
+| POST | `/admin/login` | login → `/admin/editor` | guest |
+| GET | `/admin/register` | `admin/auth/register` | guest |
+| POST | `/admin/register` | buat user → `/admin/editor` | guest |
+| POST | `/admin/logout` | logout → `/` | ✓ |
+| GET | `/admin/editor` | `admin/editor/index` — daftar proyek | ✓ |
+| POST | `/admin/editor` | buat proyek → `/admin/editor/:id` | ✓ |
+| GET | `/admin/editor/:id` | `admin/editor/show` — editor | ✓ |
+| POST | `/admin/editor/:id` | simpan/autosave proyek | ✓ |
+| POST | `/admin/editor/:id/delete` | hapus proyek → `/admin/editor` | ✓ |
 
-Health check: `GET /health` → status driver DB.
+Semua mutasi via form POST (PRG). Validasi payload proyek di controller
+(JSON `ukuran`/`halaman`, batas ukuran halaman 50–5000px, maks 500 halaman).
 
 ---
 
@@ -107,8 +126,9 @@ tidak menyentuh `data/app.db`. Cakupan saat ini:
 | File | Menguji |
 |---|---|
 | `test/session.model.test.ts` | create/find/delete session |
+| `test/user.model.test.ts` | register, verifyPassword, tanpa bocor hash |
 | `test/project.model.test.ts` | CRUD proyek, JSON parse halaman/ukuran |
-| `test/api.test.ts` | integrasi API: ping, 401 tanpa login, 404 id tidak ada |
+| `test/web.test.ts` | integrasi web: render view, auth flow, editor CRUD, validasi, flash |
 
 CI otomatis menjalankan `bun test` + `bun run build:css` di setiap push/PR ke
 `master`.
@@ -127,15 +147,13 @@ CI otomatis menjalankan `bun test` + `bun run build:css` di setiap push/PR ke
    ```
 
 Catatan: route saat ini **sqlite-first**. Saat pindah Supabase, tambahkan branch
-`db.supabase` di tiap route (pola `if (db.sqlite) { ... } else { ... }`).
+`db.supabase` di tiap controller (pola `if (db.sqlite) { ... } else { ... }`).
 
 ---
 
 ## Roadmap
 
-- **Auth lengkap** — halaman login/register (saat ini `requireAuth` ada tapi
-  belum ada endpoint/auth untuk membuat session).
-- **Editor visual** — UI editor dengan blok konten & preview halaman.
+- **Reader (mode baca)** — halaman publik untuk membaca dokumen ala pubhtml5.
 - **Export PDF** — generate PDF dari proyek.
 - **Supabase driver** — implementasikan branch `db.supabase` di controller.
 

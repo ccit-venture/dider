@@ -33,12 +33,21 @@ export function destroySession(c: Context, db: Db) {
   deleteCookie(c, "sid");
 }
 
-/** Middleware: wajib login. Simpan userId di c.set("userId"). */
+/** Middleware: wajib login. Simpan userId di c.set("userId"). Redirect ke login. */
 export function requireAuth(db: Db) {
   return async (c: Context, next: Next) => {
     const userId = getUserId(c, db);
-    if (!userId) return c.json({ error: "harus login" }, 401);
+    if (!userId) return c.redirect("/admin/login", 302);
     c.set("userId", userId);
+    await next();
+  };
+}
+
+/** Middleware guest: halaman login/register — kalau sudah login, arahkan ke editor. */
+export function redirectIfAuthenticated(db: Db) {
+  return async (c: Context, next: Next) => {
+    const userId = getUserId(c, db);
+    if (userId) return c.redirect("/admin/editor", 302);
     await next();
   };
 }

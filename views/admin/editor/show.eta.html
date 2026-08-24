@@ -1,0 +1,30 @@
+<% layout("/layouts/admin") %>
+<% it.title = "Editor — " + it.project.nama %>
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold"><%= it.project.nama %></h1>
+    <p class="text-xs text-slate-400">Diperbarui <%= it.project.updated_at %></p>
+  </div>
+  <a href="/admin/editor" class="text-sm text-slate-500 hover:text-slate-700">← Kembali</a>
+</div>
+
+<form id="editor-form" method="post" action="/admin/editor/<%= it.project.id %>" class="space-y-4">
+  <div class="flex flex-wrap items-end gap-4 bg-white border border-slate-200 rounded-xl p-4">
+    <div class="flex-1 min-w-48">
+      <label for="nama" class="block text-sm font-medium mb-1">Nama Proyek</label>
+      <input id="nama" name="nama" required value="<%= it.project.nama %>"
+        class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" id="add-page" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-semibold">+ Halaman</button>
+      <button type="button" id="add-text" class="bg-slate-200 px-4 py-2 rounded-lg text-sm font-semibold">+ Teks</button>
+      <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">Simpan</button>
+    </div>
+  </div>
+  <input type="hidden" name="ukuran" id="ukuran-input" value="<%= it.project.ukuran %>" />
+  <input type="hidden" name="halaman" id="halaman-input" value="<%= it.project.halaman %>" />
+  <div id="editor-canvas" class="bg-white border border-slate-200 rounded-xl p-4 pt-8"></div>
+</form>
+
+<script src="/editor.js"></script>

@@ -11,6 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "eta": "^4.6.0",
     "hono": "^4"
   },
   "devDependencies": {
