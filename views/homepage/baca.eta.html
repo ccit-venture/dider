@@ -58,7 +58,7 @@
       const flip = new FlipBook(flipbookEl, {
         width: TARGET_W,
         height: H,
-        minWidth: 280,
+        minWidth: 100,
         maxWidth: TARGET_W,
         size: "stretch",
         showCover: true,
@@ -66,20 +66,52 @@
         clickEventForward: true,
         usePortrait: true,
       });
+
+      // Spread aktif (1 = halaman tunggal, 2 = spread ganda)
+      const currentSpread = () =>
+        flip.pages.getSpread()[flip.pages.currentSpreadIndex] || [];
+
+      // Nomor halaman: spread ganda → "Halaman 2–3", tunggal → "Halaman 1"
+      const updateInfo = () => {
+        const spread = currentSpread();
+        if (spread.length === 2) {
+          pageInfo.textContent = `Halaman ${spread[0] + 1}–${spread[1] + 1} / ${pdf.numPages}`;
+        } else if (spread.length === 1) {
+          pageInfo.textContent = `Halaman ${spread[0] + 1} / ${pdf.numPages}`;
+        }
+      };
+
+      // Sampul & halaman terakhir tampil sebagai satu halaman (50% lebar buku)
+      const applyBookWidth = () => {
+        const isPortrait = flip.render.getOrientation() === "portrait";
+        const single = currentSpread().length === 1;
+        const w = !isPortrait && single ? "50%" : "100%";
+        if (flipbookEl.style.width !== w) {
+          flipbookEl.style.width = w;
+          flip.update();
+        }
+      };
+
       flip.loadFromImages(images);
 
       statusEl.style.display = "none";
-      const update = () =>
-        (pageInfo.textContent = "Halaman " + (flip.getCurrentPageIndex() + 1) + " / " + pdf.numPages);
+      flip.on("init", () => {
+        updateInfo();
+        applyBookWidth();
+      });
+      // Event "flip" juga terpicu saat halaman ditarik/diseret
+      flip.on("flip", () => {
+        updateInfo();
+        applyBookWidth();
+      });
       prevBtn.addEventListener("click", () => {
         flip.flipPrev();
-        update();
+        updateInfo();
       });
       nextBtn.addEventListener("click", () => {
         flip.flipNext();
-        update();
+        updateInfo();
       });
-      update();
     } catch (err) {
       statusEl.textContent = "Gagal memuat dokumen: " + (err?.message || err);
     }

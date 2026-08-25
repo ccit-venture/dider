@@ -83,6 +83,16 @@ describe("Reader — bundle page-flip (flipbook)", () => {
       // array elemen HTML — tanpa argumen memicu "pagesElement is not iterable")
       expect(html).toContain("loadFromImages(images)");
       expect(html).not.toContain("updateFromHtml");
+      // Sampul & halaman terakhir: buku menyempit jadi satu halaman
+      expect(html).toContain("applyBookWidth");
+      expect(html).toContain('"50%"');
+      // minWidth 100: buku 50% (satu halaman) tidak berubah orientasi (anti stack overflow)
+      expect(html).toContain("minWidth: 100");
+      // Nomor halaman ikut berubah saat ditarik (event flip)
+      expect(html).toContain('flip.on("flip"');
+      expect(html).toContain('flip.on("init"');
+      // Tidak ada hook debug tersisa
+      expect(html).not.toContain("__flip");
     } finally {
       cleanupUpload(id);
     }
