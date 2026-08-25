@@ -79,6 +79,10 @@ describe("Reader — bundle page-flip (flipbook)", () => {
       expect(html).toContain("/page-flip.css");
       expect(html).toContain('getDocument({ url: "/uploads/');
       expect(html).not.toContain("/uploads/uploads/");
+      // Mode gambar: loadFromImages TANPA updateFromHtml (updateFromHtml butuh
+      // array elemen HTML — tanpa argumen memicu "pagesElement is not iterable")
+      expect(html).toContain("loadFromImages(images)");
+      expect(html).not.toContain("updateFromHtml");
     } finally {
       cleanupUpload(id);
     }

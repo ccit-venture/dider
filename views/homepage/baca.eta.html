@@ -61,12 +61,12 @@
         minWidth: 280,
         maxWidth: TARGET_W,
         size: "stretch",
-        showCover: false,
+        showCover: true,
         mobileScrollSupport: true,
-        swipeEnable: true,
+        clickEventForward: true,
+        usePortrait: true,
       });
       flip.loadFromImages(images);
-      flip.updateFromHtml();
 
       statusEl.style.display = "none";
       const update = () =>
