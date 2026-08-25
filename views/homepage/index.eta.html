@@ -1,0 +1,31 @@
+<% layout("/layouts/homepage") %>
+<% it.title = "Dider — Digital Reader" %>
+
+<header class="text-center py-16">
+  <h1 class="text-4xl font-extrabold">
+    Bikin <span class="text-indigo-600">dokumen & majalah</span> langsung jadi PDF
+  </h1>
+  <p class="mt-3 text-slate-600 max-w-xl mx-auto">
+    Susun halaman dari blok-blok konten, atur ukuran, dan export PDF siap cetak.
+  </p>
+  <div class="mt-6 flex justify-center gap-4">
+    <a href="/admin/login" class="bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700">Masuk Admin</a>
+    <a href="/admin/register" class="border border-slate-300 px-6 py-3 rounded-lg font-semibold hover:bg-slate-100">Buat Akun</a>
+  </div>
+</header>
+
+<section class="max-w-3xl mx-auto">
+  <h2 class="text-xl font-bold mb-4">Dokumen Terbaru</h2>
+  <% if (it.projects.length === 0) { %>
+    <p class="text-slate-500">Belum ada dokumen. Baca mode (reader) segera hadir.</p>
+  <% } else { %>
+    <ul class="space-y-3">
+      <% it.projects.forEach(function (p) { %>
+        <li class="bg-white border border-slate-200 rounded-lg px-4 py-3 flex items-center justify-between">
+          <span class="font-medium"><%= p.nama %></span>
+          <span class="text-xs text-slate-400"><%= p.updated_at %></span>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>

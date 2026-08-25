@@ -36,4 +36,9 @@ export class ProjectModel {
       )
       .run(nama, JSON.stringify(ukuran), JSON.stringify(halaman), id);
   }
+
+  /** Hapus proyek. */
+  delete(id: string) {
+    this.db.query("DELETE FROM projects WHERE id = ?").run(id);
+  }
 }

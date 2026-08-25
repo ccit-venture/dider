@@ -49,4 +49,14 @@ describe("ProjectModel", () => {
     const projects = new ProjectModel(db);
     expect(projects.findById("id-ngasal")).toBeNull();
   });
+
+  test("delete menghapus proyek", () => {
+    const db = createTestDb();
+    const projects = new ProjectModel(db);
+
+    const id = projects.create("Majalah", { lebar: 794, tinggi: 1123 }, []);
+    projects.delete(id);
+
+    expect(projects.findById(id)).toBeNull();
+  });
 });
