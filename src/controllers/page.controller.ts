@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { existsSync } from "fs";
 import type { Db } from "../db";
 import { ProjectModel } from "../models/project.model";
 import { view, redirect, flashError } from "../view";
@@ -17,6 +18,10 @@ export function pageController(db: Db) {
     const doc = new ProjectModel(db.sqlite).findById(c.req.param("id"));
     if (!doc) {
       flashError(c, "Dokumen tidak ditemukan.");
+      return redirect(c, "/");
+    }
+    if (!existsSync(doc.pdf_path)) {
+      flashError(c, "File PDF tidak ditemukan di server. Upload ulang dokumen ini.");
       return redirect(c, "/");
     }
     // pdf_path di DB = "uploads/x.pdf"; view butuh nama file saja untuk URL /uploads/...

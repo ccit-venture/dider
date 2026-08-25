@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { unlinkSync } from "fs";
 import {
   createTestApp,
   cookieFrom,
@@ -237,5 +238,46 @@ describe("Web — dokumen (upload PDF, wajib login)", () => {
     const res = await app.request("/baca/id-ngasal");
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/");
+  });
+
+  test("file PDF hilang → list admin menandai & reader redirect ramah", async () => {
+    const app = createTestApp();
+    const cookie = await registerUser(app);
+
+    // Upload dulu
+    const form = new FormData();
+    form.append("nama", "Majalah Hilang");
+    form.append("pdf", new File([pdfBody], "hilang.pdf", { type: "application/pdf" }));
+    await app.request("/admin/dokumen", {
+      method: "POST",
+      headers: { cookie, ...formHeaders },
+      body: form,
+    });
+
+    const list = await app.request("/admin/dokumen", { headers: { cookie } });
+    const listHtml = await list.text();
+    const id = listHtml.match(/\/baca\/([0-9a-f-]+)/)![1];
+    expect(listHtml).not.toContain("File hilang");
+
+    // Simulasikan file terhapus dari disk
+    unlinkSync(`uploads/${id}.pdf`);
+
+    // List admin menandai file hilang
+    const list2 = await (await app.request("/admin/dokumen", { headers: { cookie } })).text();
+    expect(list2).toContain("File hilang — upload ulang");
+
+    // Reader tidak 404 mentah: redirect ke / + flash error
+    const baca = await app.request(`/baca/${id}`);
+    expect(baca.status).toBe(302);
+    expect(baca.headers.get("location")).toBe("/");
+
+    const page = await app.request("/", { headers: { cookie: cookieFrom(baca) } });
+    expect(await page.text()).toContain("File PDF tidak ditemukan");
+
+    // Bersihkan record via delete (unlink file gagal di-swallow)
+    await app.request(`/admin/dokumen/${id}/delete`, {
+      method: "POST",
+      headers: { cookie, ...formHeaders },
+    });
   });
 });

@@ -30,7 +30,11 @@
     <% it.dokumen.forEach(function (d) { %>
       <div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between">
         <div>
-          <p class="font-semibold"><%= d.nama %></p>
+          <p class="font-semibold"><%= d.nama %>
+            <% if (d.missing) { %>
+              <span class="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">File hilang — upload ulang</span>
+            <% } %>
+          </p>
           <p class="text-xs text-slate-400">Diperbarui <%= d.updated_at %></p>
         </div>
         <div class="flex items-center gap-3">

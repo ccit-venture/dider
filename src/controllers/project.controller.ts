@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { randomUUID } from "crypto";
-import { unlinkSync } from "fs";
+import { unlinkSync, existsSync } from "fs";
 import type { Db } from "../db";
 import { ProjectModel } from "../models/project.model";
 import { requireAuth } from "../middleware/auth.middleware";
@@ -22,7 +22,11 @@ export function projectController(db: Db) {
 
   // GET /admin/dokumen — daftar dokumen + form upload
   app.get("/dokumen", requireAuth(db), (c) => {
-    return view(c, "admin/dokumen/index", { dokumen: projects.list() });
+    const dokumen = projects.list().map((d) => ({
+      ...d,
+      missing: !existsSync(d.pdf_path),
+    }));
+    return view(c, "admin/dokumen/index", { dokumen });
   });
 
   // POST /admin/dokumen — upload PDF
@@ -49,6 +53,10 @@ export function projectController(db: Db) {
     const id = randomUUID();
     const pdfPath = `${UPLOAD_DIR}/${id}.pdf`;
     await Bun.write(pdfPath, file);
+    if (!existsSync(pdfPath)) {
+      flashError(c, "Gagal menyimpan file PDF di server. Coba lagi.");
+      return redirect(c, "/admin/dokumen");
+    }
     projects.create(nama, pdfPath, id);
     flashSuccess(c, `Dokumen "${nama}" berhasil di-upload.`);
     return redirect(c, "/admin/dokumen");
