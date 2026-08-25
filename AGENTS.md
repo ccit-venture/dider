@@ -5,9 +5,9 @@ tidak merusak struktur, path import, atau konvensi yang sudah ada.
 
 ## Ringkasan Proyek
 
-Aplikasi web pembuat dokumen & majalah digital yang diekspor ke PDF. Susun
-halaman dari blok-blok konten, atur ukuran, autosave, export PDF. Terinspirasi
-dari pubhtml5.com.
+Platform baca dokumen & majalah digital ala pubhtml5.com: **upload PDF** dari
+area admin, pembaca membukanya dengan pengalaman **flipbook** (efek membalik
+halaman) via **pdf.js** + **StPageFlip** di browser.
 
 Stack: **Bun + Hono + Eta (template engine) + SQLite + Tailwind + vanilla JS** —
 server-rendered MVC (gaya Laravel).
@@ -15,7 +15,8 @@ server-rendered MVC (gaya Laravel).
 Arsitektur alur:
 **Browser (form POST)** → **Routes** (`src/routes/web.ts`) → **Controller**
 (`src/controllers/`) → **Model** (`src/models/`) → SQLite, lalu Controller
-mengembalikan **View Eta** (`views/`) → HTML.
+mengembalikan **View Eta** (`views/`) → HTML. File PDF disimpan di `uploads/`
+dan di-serve statis.
 
 **TIDAK ada JSON API** — semua submit via form POST + redirect (PRG).
 Jangan menambahkan route `/api/*` atau `fetch()` ke endpoint JSON.
@@ -40,17 +41,18 @@ Repositori ini publik (open source) di `ccit-venture/dider`. Perhatikan:
 ```
 src/
 ├── index.ts                # entry: server Bun (port 3000). JANGAN taruh logika bisnis di sini
-├── app.ts                  # createApp(db): middleware global (logger, secureHeaders, csrf) + static
-├── db.ts                   # initDb() (sqlite | supabase) + migrate(). Skema SQL ada di sini (mode sqlite)
+├── app.ts                  # createApp(db): middleware (logger, secureHeaders, csrf) + static
+│                           #   /uploads/* → ./uploads (PDF), /vendor/* → ./node_modules (pdfjs/page-flip)
+├── db.ts                   # initDb() (sqlite | supabase) + migrate() (skema: users, sessions, projects)
 ├── view.ts                 # setup Eta + helper view()/redirect()/flash*. Analog view() Laravel
 ├── models/                 # MODEL — query SQL. Satu class per tabel/domain
 │   ├── user.model.ts       #   users (auth admin)
 │   ├── session.model.ts    #   sessions
-│   └── project.model.ts    #   projects (nama, ukuran JSON, halaman JSON)
+│   └── project.model.ts    #   projects (dokumen PDF: id, nama, pdf_path)
 ├── controllers/            # CONTROLLER — parse form → model → view/redirect
 │   ├── auth.controller.ts  #   /admin/login, /admin/register, /admin/logout
-│   ├── page.controller.ts  #   GET / (homepage)
-│   └── project.controller.ts # /admin/editor* CRUD proyek
+│   ├── page.controller.ts  #   GET / (homepage), GET /baca/:id (reader flipbook)
+│   └── project.controller.ts # /admin/dokumen* — upload PDF, list, hapus
 ├── middleware/
 │   ├── auth.middleware.ts  # getUserId / createSession / destroySession / requireAuth / redirectIfAuthenticated
 │   └── locals.middleware.ts # inject user + flash ke context untuk semua halaman
@@ -59,9 +61,10 @@ src/
 views/                      # VIEW — template Eta
 ├── layouts/                # admin.eta.html & homepage.eta.html (pakai it.body)
 ├── partials/               # navbar + errors.eta.html
-├── admin/                  # auth/ (login, register) + editor/ (index, show)
-└── homepage/               # index.eta.html
-public/                     # aset statis: style.css (hasil Tailwind), editor.js
+├── admin/                  # auth/ (login, register) + dokumen/ (index: list + upload)
+└── homepage/               # index.eta.html (daftar) + baca.eta.html (reader flipbook)
+public/                     # aset statis: style.css (hasil Tailwind), page-flip.css
+uploads/                    # file PDF hasil upload (di-gitignore)
 test/                       # unit test
 ```
 
@@ -79,19 +82,33 @@ test/                       # unit test
 - Escape otomatis default (`<%=`). Gunakan `<%~` HANYA untuk HTML mentah
   (contoh: flash/navbar via include).
 - Judul halaman: `<% it.title = "..." %>` di baris atas halaman.
-- Render di controller via `view(c, "admin/editor/show", { project })` dari
+- Render di controller via `view(c, "admin/dokumen/index", { dokumen })` dari
   `src/view.ts`.
+
+### Upload PDF & Reader
+
+- Upload di `POST /admin/dokumen` (multipart, wajib login). Validasi:
+  `file.type === "application/pdf"` ATAU ekstensi `.pdf`, maks **50MB**.
+  JANGAN pindahkan validasi ini tanpa tes.
+- File disimpan `uploads/<uuid>.pdf` (folder di-gitignore; path dari env
+  `UPLOAD_DIR`, default `uploads`). Metadata (nama, path) di tabel `projects`.
+- File di-serve via `serveStatic` `/uploads/*` (lihat `src/app.ts`).
+- Reader publik di `GET /baca/:id` → view `homepage/baca` memakai:
+  - `/vendor/pdfjs-dist/build/pdf.min.mjs` (ESM) + worker `pdf.worker.min.mjs`
+  - `/vendor/page-flip/dist/js/page-flip.browser.js` (global `St.StPageFlip`)
+  - `/page-flip.css`
+  Ketiga path vendor ini TIDAK boleh diubah — route `/vendor/*` menunjuk
+  `./node_modules`.
+- Hapus dokumen = hapus baris DB **dan** file (`unlinkSync(pdf_path)`).
 
 ### Form & Request
 
 - Semua mutasi pakai `<form method="post">` → controller → `redirect(c, ...)`
   (PRG). Jangan buat JSON API / fetch.
-- `c.req.parseBody()` untuk baca form (urlencoded/multipart).
+- `c.req.parseBody()` untuk baca form (urlencoded/multipart; field file
+  kembali sebagai `File`).
 - Flash message: `flashSuccess` / `flashError` sebelum redirect; tampilkan di
   layout via `it.flash`.
-- Validasi input proyek ada di `project.controller.ts` (`parseProject`):
-  JSON `ukuran`/`halaman` wajib valid, ukuran 50–5000px, maks 500 halaman.
-  Jangan pindahkan logika ini tanpa tes.
 
 ### Auth & Middleware
 
@@ -124,20 +141,26 @@ bun test
 
 DB test memakai SQLite **in-memory** (`:memory:` di `test/helpers.ts`) — tidak
 menyentuh `data/app.db`. Request test form POST wajib menyertakan header
-`origin: http://localhost:3000` (csrf) — lihat `formPostHeaders` di
-`test/helpers.ts`.
+`origin: http://localhost:3000` (csrf) — lihat `formHeaders` di
+`test/helpers.ts`. Upload test memakai `FormData` + `File`.
 
 ## Hal yang Sering Salah
 
 - **Menambahkan JSON API / fetch** — project ini murni form POST (PRG).
 - **`layout`/`include` tanpa prefix `/`** — template gagal ditemukan.
 - **Pakai `it.content` di layout** — Eta v4 mengirim body sebagai `it.body`.
+- **Menghidupkan kembali editor blok** — konsep Dider = upload PDF + reader
+  flipbook. Tabel `projects` hanya `id, nama, pdf_path` (skema lama dengan
+  `ukuran`/`halaman` otomatis di-drop oleh migrasi).
+- **Mengubah path vendor pdfjs/page-flip** — reader akan rusak.
+- **Upload tanpa validasi PDF/ukuran** — wajib lewat `parseProject`-style
+  validasi di `project.controller.ts` (hanya PDF, ≤ 50MB).
 - **Mengedit `public/style.css` langsung** — itu hasil compile Tailwind. Ubah
   `src/styles/input.css` lalu `bun run build:css`.
 - **Menghapus guard `if (!db.sqlite)`** di controller — memecah mode
   sqlite-first.
 - **POST tanpa Origin header di test** — kena 403 csrf.
-- **Commit file `.env` / `data/`** — sudah di-ignore, jangan di-add paksa
-  (`git add -f`).
+- **Commit file `.env` / `data/` / `uploads/`** — sudah di-ignore, jangan
+  di-add paksa (`git add -f`).
 - **Menambah route tanpa tes** — setiap halaman/aksi baru sebaiknya punya
   coverage di `test/web.test.ts`.

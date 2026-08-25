@@ -1,0 +1,211 @@
+<% layout("/layouts/homepage") %>
+<% it.title = it.dokumen.nama + " — Dider" %>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-xl font-bold"><%= it.dokumen.nama %></h1>
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-700">← Kembali</a>
+</div>
+
+<p id="reader-status" class="text-center text-slate-500 py-10">Memuat dokumen…</p>
+<div id="flipbook-clip" class="mx-auto overflow-hidden w-full">
+  <div id="flipbook" class="w-full"></div>
+</div>
+
+<div class="mt-4 text-center space-x-3">
+  <button id="prev" class="border border-slate-300 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100">← Sebelumnya</button>
+  <span id="page-info" class="text-sm text-slate-500">-</span>
+  <button id="next" class="border border-slate-300 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100">Berikutnya →</button>
+</div>
+
+<div class="mt-4 text-center">
+  <a href="/uploads/<%= it.dokumen.pdf_path %>" class="text-indigo-600 hover:underline text-sm">Unduh PDF</a>
+</div>
+
+<link rel="stylesheet" href="/page-flip.css" />
+<script src="/vendor/page-flip/dist/js/page-flip.browser.js"></script>
+<script type="module">
+  import * as pdfjsLib from "/vendor/pdfjs-dist/build/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs-dist/build/pdf.worker.min.mjs";
+
+  const statusEl = document.getElementById("reader-status");
+  const clipEl = document.getElementById("flipbook-clip");
+  const flipbookEl = document.getElementById("flipbook");
+  const prevBtn = document.getElementById("prev");
+  const nextBtn = document.getElementById("next");
+  const pageInfo = document.getElementById("page-info");
+
+  (async () => {
+    try {
+      const pdf = await pdfjsLib
+      .getDocument({ url: "/uploads/<%= it.dokumen.pdf_path %>" })
+      .promise;
+      const first = await pdf.getPage(1);
+      const base = first.getViewport({ scale: 1 });
+      const TARGET_W = 640;
+      const scale = TARGET_W / base.width;
+      const H = Math.round(base.height * scale);
+
+      const images = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d");
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        images.push(canvas.toDataURL("image/jpeg", 0.92));
+      }
+
+      const FlipBook = St.PageFlip;
+      const flip = new FlipBook(flipbookEl, {
+        width: TARGET_W,
+        height: H,
+        minWidth: 280,
+        maxWidth: TARGET_W,
+        size: "stretch",
+        showCover: true,
+        mobileScrollSupport: true,
+        clickEventForward: true,
+        usePortrait: true,
+      });
+
+      flip.loadFromImages(images);
+
+      // Bekukan lebar buku (bundle set width:100% saat konstruksi & loadFromImages)
+      // agar clip 50% pada halaman tunggal tidak menyempitkan halaman
+      flipbookEl.style.width = flipbookEl.clientWidth + "px";
+
+      // Spread aktif (1 = halaman tunggal, 2 = spread ganda)
+      const currentSpread = () =>
+        flip.pages.getSpread()[flip.pages.currentSpreadIndex] || [];
+
+      // Nomor halaman: spread ganda → "Halaman 2–3", tunggal → "Halaman 1"
+      const updateInfo = () => {
+        const spread = currentSpread();
+        if (spread.length === 2) {
+          pageInfo.textContent = `Halaman ${spread[0] + 1}–${spread[1] + 1} / ${pdf.numPages}`;
+        } else if (spread.length === 1) {
+          pageInfo.textContent = `Halaman ${spread[0] + 1} / ${pdf.numPages}`;
+        }
+      };
+
+      // Shadow punggung buku bawaan terlalu tebal → ganti versi tipis & halus
+      flip.render.drawBookShadow = function () {
+        const t = this.getRect();
+        this.ctx.save();
+        this.ctx.beginPath();
+        const e = Math.max(10, t.width / 60); // ~16px untuk buku 992
+        this.ctx.rect(t.left, t.top, t.width, t.height);
+        const i = { x: t.left + t.width / 2 - e / 2, y: 0 };
+        this.ctx.translate(i.x, i.y);
+        const s = this.ctx.createLinearGradient(0, 0, e, 0);
+        s.addColorStop(0, "rgba(0, 0, 0, 0)");
+        s.addColorStop(0.5, "rgba(0, 0, 0, 0.28)");
+        s.addColorStop(1, "rgba(0, 0, 0, 0)");
+        this.ctx.clip();
+        this.ctx.fillStyle = s;
+        this.ctx.fillRect(0, 0, e, 2 * t.height);
+        this.ctx.restore();
+      };
+
+      // Sampul & halaman terakhir: halaman tunggal ukuran penuh di-tengahkan.
+      // Buku 2 halaman lebar; clip (50%) hanya menampilkan separuh yang berisi
+      // halaman: cover (kanan) → buku digeser -50%, halaman terakhir (kiri) → tanpa geser.
+      const applyBookWidth = () => {
+        const isPortrait = flip.render.getOrientation() === "portrait";
+        const spread = currentSpread();
+        const single = spread.length === 1 && !isPortrait;
+        if (!single) {
+          flipbookEl.style.transform = "none";
+          clipEl.style.width = "100%";
+          return;
+        }
+        const isLast = spread[0] === flip.pages.getPageCount() - 1;
+        flipbookEl.style.transform = isLast ? "none" : "translateX(-50%)";
+        clipEl.style.width = "50%";
+      };
+
+      statusEl.style.display = "none";
+      flip.on("init", () => {
+        updateInfo();
+        applyBookWidth();
+      });
+
+      // Suara kertas saat halaman dibuka (disintesis Web Audio API — tanpa file)
+      let audioCtx = null;
+      const playFlipSound = () => {
+        try {
+          if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          if (audioCtx.state === "suspended") audioCtx.resume();
+          const dur = 0.18;
+          const buffer = audioCtx.createBuffer(
+            1,
+            Math.ceil(audioCtx.sampleRate * dur),
+            audioCtx.sampleRate
+          );
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < data.length; i++) {
+            const t = i / data.length;
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2) * (0.5 + 0.5 * Math.sin(Math.PI * t));
+          }
+          const src = audioCtx.createBufferSource();
+          src.buffer = buffer;
+          const filter = audioCtx.createBiquadFilter();
+          filter.type = "bandpass";
+          filter.frequency.setValueAtTime(1400, audioCtx.currentTime);
+          filter.frequency.exponentialRampToValueAtTime(350, audioCtx.currentTime + dur);
+          filter.Q.value = 0.8;
+          const gain = audioCtx.createGain();
+          gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.4, audioCtx.currentTime + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+          src.connect(filter);
+          filter.connect(gain);
+          gain.connect(audioCtx.destination);
+          src.start();
+        } catch {
+          // audio tidak didukung — abaikan
+        }
+      };
+      // Suara kertas dipicu saat halaman benar-benar ganti (event "flip").
+      // Event ini terpicu untuk drag, scroll, tombol — dan snap-back
+      // (ditarik tanpa ganti halaman) tidak memicunya.
+      flip.on("flip", () => {
+        updateInfo();
+        applyBookWidth();
+        playFlipSound();
+      });
+
+      // Scroll mouse: maju (scroll bawah) / mundur (scroll atas)
+      let wheelCooldown = false;
+      clipEl.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          if (wheelCooldown) return;
+          if (flip.flipController.getState() !== "read") return;
+          if (Math.abs(e.deltaY) < 10) return;
+          if (e.deltaY > 0) flip.flipNext();
+          else flip.flipPrev();
+          wheelCooldown = true;
+          setTimeout(() => (wheelCooldown = false), 350);
+        },
+        { passive: false }
+      );
+
+      prevBtn.addEventListener("click", () => {
+        flip.flipPrev();
+        updateInfo();
+      });
+      nextBtn.addEventListener("click", () => {
+        flip.flipNext();
+        updateInfo();
+      });
+    } catch (err) {
+      statusEl.textContent = "Gagal memuat dokumen: " + (err?.message || err);
+    }
+  })();
+</script>

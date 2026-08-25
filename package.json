@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "eta": "^4.6.0",
-    "hono": "^4"
+    "hono": "^4",
+    "page-flip": "^2.0.7",
+    "pdfjs-dist": "^6.2.108"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4",

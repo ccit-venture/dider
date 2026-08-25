@@ -1,7 +1,8 @@
 # Dider
 
-> Dider (Digital Reader) — aplikasi web pembuat dokumen & majalah digital yang
-> diekspor ke PDF. Terinspirasi dari [pubhtml5.com](https://pubhtml5.com/).
+> Dider (Digital Reader) — platform baca dokumen & majalah digital ala
+> [pubhtml5.com](https://pubhtml5.com/): **upload PDF**, baca dengan pengalaman
+> **flipbook**.
 
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
 ![Stack](https://img.shields.io/badge/stack-Bun%20%7C%20Hono%20%7C%20Eta%20%7C%20SQLite-blue)
@@ -11,25 +12,26 @@
 
 ## Latar Belakang
 
-Membuat dokumen atau majalah digital biasanya butuh aplikasi desktop yang berat.
-Dider hadir sebagai editor berbasis web yang ringan: susun **halaman** dari
-**blok-blok** konten, atur **ukuran halaman**, simpan (autosave), dan export ke
-**PDF** siap cetak — semuanya dari browser.
+Menyajikan majalah/dokumen digital biasanya butuh platform berbayar. Dider
+memberikan cara sederhana: **upload PDF** dari area admin, lalu pembaca
+membukanya dengan pengalaman **flipbook** (efek membalik halaman) seperti
+majalah sungguhan — langsung dari browser.
 
 ## Arsitektur
 
 Server-rendered MVC (gaya Laravel): Hono controller mengembalikan **view Eta**
 (HTML), semua submit via **form POST** + redirect (PRG). Tidak ada JSON API
-terpisah.
+terpisah. PDF disimpan di `uploads/` dan dibaca via **pdf.js** + **StPageFlip**.
 
 ```mermaid
 flowchart LR
     Browser["Browser<br/>form POST · Tailwind + vanilla JS"]
-    Web["Hono Web Routes<br/>/ · /admin/*"]
+    Web["Hono Web Routes<br/>/ · /admin/* · /baca/:id"]
     Ctrl["Controllers<br/>auth · page · project"]
     Model["Models<br/>user · session · project"]
     View["Eta Views<br/>views/ · layouts + partials"]
     DB[("SQLite<br/>data/app.db")]
+    PDF[("uploads/*.pdf")]
 
     Browser -->|POST form| Web
     Web --> Ctrl
@@ -37,11 +39,12 @@ flowchart LR
     Model --> DB
     Ctrl --> View
     View --> Browser
+    Browser -->|"pdf.js + StPageFlip"| PDF
 ```
 
 **Keamanan terpasang:** cookie session `httpOnly` + `sameSite=Lax`, password
 di-hash argon2 (`Bun.password`), `hono/csrf` (origin) di semua request,
-escape default Eta (`<%=`).
+escape default Eta (`<%=`), validasi upload (hanya PDF, maks 50MB).
 
 ---
 
@@ -51,17 +54,17 @@ escape default Eta (`<%=`).
 dider/
 ├── src/
 │   ├── index.ts                # entry: server Bun (port 3000, hot reload)
-│   ├── app.ts                  # build Hono app + middleware global + static
+│   ├── app.ts                  # build Hono app + middleware + static (/uploads, /vendor)
 │   ├── db.ts                   # koneksi DB (sqlite | supabase) + migrasi
 │   ├── view.ts                 # setup Eta + helper view()/redirect()/flash
 │   ├── models/                 # MODEL — akses data / query SQL
 │   │   ├── user.model.ts       #   users: register, verifyPassword (argon2)
 │   │   ├── session.model.ts    #   sessions: create/find/delete session cookie
-│   │   └── project.model.ts    #   projects: create, list, findById, update, delete
+│   │   └── project.model.ts    #   projects (dokumen PDF): create, list, findById, delete
 │   ├── controllers/            # CONTROLLER — form POST → model → view/redirect
 │   │   ├── auth.controller.ts  #   /admin/login, /admin/register, /admin/logout
-│   │   ├── page.controller.ts  #   GET / (homepage publik)
-│   │   └── project.controller.ts # /admin/editor* — CRUD proyek (auth)
+│   │   ├── page.controller.ts  #   GET / (homepage), GET /baca/:id (reader)
+│   │   └── project.controller.ts # /admin/dokumen* — upload PDF, list, hapus
 │   ├── middleware/
 │   │   ├── auth.middleware.ts  # session helpers + requireAuth + guest
 │   │   └── locals.middleware.ts # inject user login + flash ke context
@@ -70,9 +73,10 @@ dider/
 ├── views/                      # VIEW — template Eta (Blade/EJS-like)
 │   ├── layouts/                #   layout admin & homepage
 │   ├── partials/               #   navbar + error list
-│   ├── admin/                  #   tampilan admin (auth + editor)
-│   └── homepage/               #   tampilan depan user
-├── public/                     # aset statis (style.css Tailwind, editor.js)
+│   ├── admin/                  #   tampilan admin (auth + dokumen)
+│   └── homepage/               #   tampilan depan user (index + baca)
+├── public/                     # aset statis (style.css Tailwind, page-flip.css)
+├── uploads/                    # file PDF hasil upload (di-gitignore)
 ├── supabase/migrations/        # skema SQL versi Supabase (opsional)
 ├── test/                       # unit test (`bun test`, SQLite in-memory)
 └── .github/                    # template issue/PR + CI
@@ -96,21 +100,21 @@ Build CSS produksi: `bun run build:css` — hasilnya `public/style.css`.
 
 | Method | Path | View / Aksi | Auth |
 |--------|------|-------------|------|
-| GET | `/` | `homepage/index` — landing | - |
+| GET | `/` | `homepage/index` — daftar dokumen | - |
 | GET | `/health` | health check | - |
+| GET | `/baca/:id` | `homepage/baca` — reader flipbook | - |
 | GET | `/admin/login` | `admin/auth/login` | guest |
-| POST | `/admin/login` | login → `/admin/editor` | guest |
+| POST | `/admin/login` | login → `/admin/dokumen` | guest |
 | GET | `/admin/register` | `admin/auth/register` | guest |
-| POST | `/admin/register` | buat user → `/admin/editor` | guest |
+| POST | `/admin/register` | buat user → `/admin/dokumen` | guest |
 | POST | `/admin/logout` | logout → `/` | ✓ |
-| GET | `/admin/editor` | `admin/editor/index` — daftar proyek | ✓ |
-| POST | `/admin/editor` | buat proyek → `/admin/editor/:id` | ✓ |
-| GET | `/admin/editor/:id` | `admin/editor/show` — editor | ✓ |
-| POST | `/admin/editor/:id` | simpan/autosave proyek | ✓ |
-| POST | `/admin/editor/:id/delete` | hapus proyek → `/admin/editor` | ✓ |
+| GET | `/admin/dokumen` | `admin/dokumen/index` — list + form upload | ✓ |
+| POST | `/admin/dokumen` | upload PDF (multipart) | ✓ |
+| POST | `/admin/dokumen/:id/delete` | hapus dokumen + file | ✓ |
 
-Semua mutasi via form POST (PRG). Validasi payload proyek di controller
-(JSON `ukuran`/`halaman`, batas ukuran halaman 50–5000px, maks 500 halaman).
+Semua mutasi via form POST (PRG). Upload divalidasi: hanya `application/pdf`
+(atau ekstensi `.pdf`), maksimal **50MB**, disimpan sebagai
+`uploads/<uuid>.pdf`.
 
 ---
 
@@ -127,8 +131,8 @@ tidak menyentuh `data/app.db`. Cakupan saat ini:
 |---|---|
 | `test/session.model.test.ts` | create/find/delete session |
 | `test/user.model.test.ts` | register, verifyPassword, tanpa bocor hash |
-| `test/project.model.test.ts` | CRUD proyek, JSON parse halaman/ukuran |
-| `test/web.test.ts` | integrasi web: render view, auth flow, editor CRUD, validasi, flash |
+| `test/project.model.test.ts` | CRUD dokumen (nama + pdf_path) |
+| `test/web.test.ts` | render view, auth flow, upload PDF (valid/invalid), reader, hapus, flash |
 
 CI otomatis menjalankan `bun test` + `bun run build:css` di setiap push/PR ke
 `master`.
@@ -153,8 +157,8 @@ Catatan: route saat ini **sqlite-first**. Saat pindah Supabase, tambahkan branch
 
 ## Roadmap
 
-- **Reader (mode baca)** — halaman publik untuk membaca dokumen ala pubhtml5.
-- **Export PDF** — generate PDF dari proyek.
+- **Sampul & thumbnail** — tampilkan preview halaman pertama di daftar dokumen.
+- **Mode layar penuh** — pengalaman baca imersif ala pubhtml5.
 - **Supabase driver** — implementasikan branch `db.supabase` di controller.
 
 Lihat [issue-issue](https://github.com/ccit-venture/dider/issues) untuk daftar

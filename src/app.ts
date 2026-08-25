@@ -23,8 +23,19 @@ export function createApp(db: Db) {
   // --- routes web (server-rendered, form POST) ---
   app.route("/", web(db));
 
-  // --- static files (style.css hasil Tailwind, editor.js) ---
-  app.use("*", serveStatic({ root: "./public" }));
+  // --- static files ---
+  app.use(
+    "/uploads/*",
+    serveStatic({ root: "./", rewriteRequestPath: (p) => p.replace(/^\/uploads/, "uploads") })
+  );
+  app.use(
+    "/vendor/*",
+    serveStatic({
+      root: "./node_modules",
+      rewriteRequestPath: (p) => p.replace(/^\/vendor/, ""),
+    })
+  );
+  app.use("*", serveStatic({ root: "./public" })); // style.css, page-flip.css
 
   return app;
 }

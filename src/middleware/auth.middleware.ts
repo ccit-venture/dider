@@ -47,7 +47,7 @@ export function requireAuth(db: Db) {
 export function redirectIfAuthenticated(db: Db) {
   return async (c: Context, next: Next) => {
     const userId = getUserId(c, db);
-    if (userId) return c.redirect("/admin/editor", 302);
+    if (userId) return c.redirect("/admin/dokumen", 302);
     await next();
   };
 }

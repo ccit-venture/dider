@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { unlinkSync } from "fs";
 import {
   createTestApp,
   cookieFrom,
@@ -53,7 +54,7 @@ describe("Web — auth", () => {
       }).toString(),
     });
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/admin/editor");
+    expect(res.headers.get("location")).toBe("/admin/dokumen");
     expect(cookieFrom(res)).toContain("sid=");
   });
 
@@ -105,7 +106,7 @@ describe("Web — auth", () => {
       body: new URLSearchParams({ username: "admin", password: "rahasia123" }).toString(),
     });
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/admin/editor");
+    expect(res.headers.get("location")).toBe("/admin/dokumen");
     expect(cookieFrom(res)).toContain("sid=");
   });
 
@@ -115,7 +116,7 @@ describe("Web — auth", () => {
 
     const res = await app.request("/admin/login", { headers: { cookie } });
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/admin/editor");
+    expect(res.headers.get("location")).toBe("/admin/dokumen");
   });
 
   test("POST /admin/logout → 302 ke /, session terhapus", async () => {
@@ -129,130 +130,154 @@ describe("Web — auth", () => {
     expect(logout.status).toBe(302);
     expect(logout.headers.get("location")).toBe("/");
 
-    const editor = await app.request("/admin/editor", { headers: { cookie } });
+    const editor = await app.request("/admin/dokumen", { headers: { cookie } });
     expect(editor.status).toBe(302);
     expect(editor.headers.get("location")).toBe("/admin/login");
   });
 });
 
-describe("Web — editor (wajib login)", () => {
-  test("GET /admin/editor tanpa login → 302 ke /admin/login", async () => {
+describe("Web — dokumen (upload PDF, wajib login)", () => {
+  const pdfBody = "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF";
+
+  test("GET /admin/dokumen tanpa login → 302 ke /admin/login", async () => {
     const app = createTestApp();
-    const res = await app.request("/admin/editor");
+    const res = await app.request("/admin/dokumen");
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/admin/login");
   });
 
-  test("flow lengkap: buat → buka → simpan → hapus", async () => {
+  test("flow lengkap: upload PDF → tampil di list → halaman baca → hapus", async () => {
     const app = createTestApp();
     const cookie = await registerUser(app);
 
-    // POST /admin/editor — buat proyek
-    const create = await app.request("/admin/editor", {
-      method: "POST",
-      headers: { cookie, ...formPostHeaders },
-      body: new URLSearchParams({
-        nama: "Majalah Angkatan",
-        ukuran: JSON.stringify({ lebar: 794, tinggi: 1123 }),
-        halaman: "[]",
-      }).toString(),
-    });
-    expect(create.status).toBe(302);
-    const loc = create.headers.get("location") ?? "";
-    expect(loc).toMatch(/^\/admin\/editor\/[0-9a-f-]+$/);
-    const id = loc.split("/").pop()!;
+    // GET /admin/dokumen — kosong
+    const awal = await app.request("/admin/dokumen", { headers: { cookie } });
+    expect(await awal.text()).toContain("Belum ada dokumen");
 
-    // GET /admin/editor/:id — buka editor
-    const page = await app.request(loc, { headers: { cookie } });
-    expect(page.status).toBe(200);
-    const html = await page.text();
-    expect(html).toContain("Majalah Angkatan");
-    expect(html).toContain(`action="/admin/editor/${id}"`);
-    expect(html).toContain("/editor.js");
-
-    // POST /admin/editor/:id — simpan perubahan
-    const halaman = JSON.stringify([
-      { id: "h1", blok: [{ id: "b1", type: "text", x: 10, y: 10, w: 100, h: 50, text: "Halo" }] },
-    ]);
-    const up = await app.request(loc, {
+    // POST /admin/dokumen — upload PDF
+    const form = new FormData();
+    form.append("nama", "Majalah Angkatan");
+    form.append("pdf", new File([pdfBody], "majalah.pdf", { type: "application/pdf" }));
+    const up = await app.request("/admin/dokumen", {
       method: "POST",
-      headers: { cookie, ...formPostHeaders },
-      body: new URLSearchParams({
-        nama: "Majalah v2",
-        ukuran: JSON.stringify({ lebar: 595, tinggi: 842 }),
-        halaman,
-      }).toString(),
+      headers: { cookie, ...formHeaders },
+      body: form,
     });
     expect(up.status).toBe(302);
-    expect(up.headers.get("location")).toBe(loc);
+    expect(up.headers.get("location")).toBe("/admin/dokumen");
 
-    const page2 = await app.request(loc, { headers: { cookie } });
-    const html2 = await page2.text();
-    expect(html2).toContain("Majalah v2");
-    expect(html2).toContain("Halo");
+    // List menampilkan dokumen
+    const list = await app.request("/admin/dokumen", { headers: { cookie } });
+    const listHtml = await list.text();
+    expect(listHtml).toContain("Majalah Angkatan");
+    const match = listHtml.match(/\/baca\/([0-9a-f-]+)/);
+    expect(match).not.toBeNull();
+    const id = match![1];
 
-    // POST /admin/editor/:id/delete — hapus
-    const del = await app.request(`${loc}/delete`, {
+    // Halaman baca (reader) publik
+    const baca = await app.request(`/baca/${id}`);
+    expect(baca.status).toBe(200);
+    const bacaHtml = await baca.text();
+    expect(bacaHtml).toContain("Majalah Angkatan");
+    expect(bacaHtml).toContain("/uploads/");
+    expect(bacaHtml).not.toContain("/uploads/uploads/");
+    expect(bacaHtml).toContain("page-flip");
+    expect(bacaHtml).toContain("pdf.min.mjs");
+    expect(bacaHtml).toContain("getDocument({ url:");
+
+    // POST /admin/dokumen/:id/delete — hapus
+    const del = await app.request(`/admin/dokumen/${id}/delete`, {
       method: "POST",
       headers: { cookie, ...formHeaders },
     });
     expect(del.status).toBe(302);
-    expect(del.headers.get("location")).toBe("/admin/editor");
+    expect(del.headers.get("location")).toBe("/admin/dokumen");
 
-    const list = await app.request("/admin/editor", { headers: { cookie } });
-    expect(await list.text()).toContain("Belum ada proyek");
+    const list2 = await app.request("/admin/dokumen", { headers: { cookie } });
+    expect(await list2.text()).toContain("Belum ada dokumen");
   });
 
-  test("POST simpan dengan halaman invalid → flash error", async () => {
+  test("upload file non-PDF → flash error", async () => {
     const app = createTestApp();
     const cookie = await registerUser(app);
 
-    const create = await app.request("/admin/editor", {
+    const form = new FormData();
+    form.append("nama", "Bukan PDF");
+    form.append("pdf", new File(["hello"], "catatan.txt", { type: "text/plain" }));
+    const res = await app.request("/admin/dokumen", {
       method: "POST",
-      headers: { cookie, ...formPostHeaders },
-      body: new URLSearchParams({
-        nama: "Proyek",
-        ukuran: JSON.stringify({ lebar: 794, tinggi: 1123 }),
-        halaman: "[]",
-      }).toString(),
+      headers: { cookie, ...formHeaders },
+      body: form,
     });
-    const loc = create.headers.get("location")!;
-    const post = await app.request(loc, {
-      method: "POST",
-      headers: { cookie, ...formPostHeaders },
-      body: new URLSearchParams({
-        nama: "Proyek",
-        ukuran: JSON.stringify({ lebar: 794, tinggi: 1123 }),
-        halaman: "bukan-json",
-      }).toString(),
-    });
-    expect(post.status).toBe(302);
-    expect(post.headers.get("location")).toBe(loc);
+    expect(res.status).toBe(302);
 
-    // Simulasi browser: sid dari register + flash baru dari response POST
     const sidCookie = cookie.split(";")[0];
-    const page = await app.request(loc, {
-      headers: { cookie: `${sidCookie}; ${cookieFrom(post)}` },
+    const page = await app.request("/admin/dokumen", {
+      headers: { cookie: `${sidCookie}; ${cookieFrom(res)}` },
     });
-    expect(await page.text()).toContain("Format halaman tidak valid");
+    expect(await page.text()).toContain("Hanya file PDF");
   });
 
-  test("GET /admin/editor/:id tidak ada → redirect ke /admin/editor", async () => {
+  test("upload tanpa file → flash error", async () => {
     const app = createTestApp();
     const cookie = await registerUser(app);
 
-    const res = await app.request("/admin/editor/id-ngasal", { headers: { cookie } });
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/admin/editor");
-  });
-
-  test("POST /admin/editor/:id tanpa login → 302 ke login", async () => {
-    const app = createTestApp();
-    const res = await app.request("/admin/editor/id-ngasal", {
+    const form = new FormData();
+    form.append("nama", "Tanpa File");
+    const res = await app.request("/admin/dokumen", {
       method: "POST",
-      headers: formHeaders,
+      headers: { cookie, ...formHeaders },
+      body: form,
     });
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/admin/login");
+    expect(res.headers.get("location")).toBe("/admin/dokumen");
+  });
+
+  test("GET /baca/:id tidak ada → redirect ke /", async () => {
+    const app = createTestApp();
+    const res = await app.request("/baca/id-ngasal");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/");
+  });
+
+  test("file PDF hilang → list admin menandai & reader redirect ramah", async () => {
+    const app = createTestApp();
+    const cookie = await registerUser(app);
+
+    // Upload dulu
+    const form = new FormData();
+    form.append("nama", "Majalah Hilang");
+    form.append("pdf", new File([pdfBody], "hilang.pdf", { type: "application/pdf" }));
+    await app.request("/admin/dokumen", {
+      method: "POST",
+      headers: { cookie, ...formHeaders },
+      body: form,
+    });
+
+    const list = await app.request("/admin/dokumen", { headers: { cookie } });
+    const listHtml = await list.text();
+    const id = listHtml.match(/\/baca\/([0-9a-f-]+)/)![1];
+    expect(listHtml).not.toContain("File hilang");
+
+    // Simulasikan file terhapus dari disk
+    unlinkSync(`uploads/${id}.pdf`);
+
+    // List admin menandai file hilang
+    const list2 = await (await app.request("/admin/dokumen", { headers: { cookie } })).text();
+    expect(list2).toContain("File hilang — upload ulang");
+
+    // Reader tidak 404 mentah: redirect ke / + flash error
+    const baca = await app.request(`/baca/${id}`);
+    expect(baca.status).toBe(302);
+    expect(baca.headers.get("location")).toBe("/");
+
+    const page = await app.request("/", { headers: { cookie: cookieFrom(baca) } });
+    expect(await page.text()).toContain("File PDF tidak ditemukan");
+
+    // Bersihkan record via delete (unlink file gagal di-swallow)
+    await app.request(`/admin/dokumen/${id}/delete`, {
+      method: "POST",
+      headers: { cookie, ...formHeaders },
+    });
   });
 });
