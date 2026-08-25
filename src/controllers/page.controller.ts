@@ -19,7 +19,9 @@ export function pageController(db: Db) {
       flashError(c, "Dokumen tidak ditemukan.");
       return redirect(c, "/");
     }
-    return view(c, "homepage/baca", { dokumen: doc });
+    // pdf_path di DB = "uploads/x.pdf"; view butuh nama file saja untuk URL /uploads/...
+    const dokumen = { ...doc, pdf_path: doc.pdf_path.replace(/^uploads\//, "") };
+    return view(c, "homepage/baca", { dokumen });
   });
 
   return app;

@@ -179,6 +179,7 @@ describe("Web — dokumen (upload PDF, wajib login)", () => {
     const bacaHtml = await baca.text();
     expect(bacaHtml).toContain("Majalah Angkatan");
     expect(bacaHtml).toContain("/uploads/");
+    expect(bacaHtml).not.toContain("/uploads/uploads/");
     expect(bacaHtml).toContain("page-flip");
     expect(bacaHtml).toContain("pdf.min.mjs");
     expect(bacaHtml).toContain("getDocument({ url:");
