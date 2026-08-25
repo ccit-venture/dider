@@ -58,7 +58,7 @@
       const flip = new FlipBook(flipbookEl, {
         width: TARGET_W,
         height: H,
-        minWidth: 100,
+        minWidth: 280,
         maxWidth: TARGET_W,
         size: "stretch",
         showCover: true,
@@ -81,15 +81,18 @@
         }
       };
 
-      // Sampul & halaman terakhir tampil sebagai satu halaman (50% lebar buku)
+      // Sampul & halaman terakhir: halaman tunggal ukuran penuh di-tengahkan.
+      // Buku tetap 2 halaman lebar; geser buku agar halamannya (kanan/kiri) ke tengah.
       const applyBookWidth = () => {
         const isPortrait = flip.render.getOrientation() === "portrait";
-        const single = currentSpread().length === 1;
-        const w = !isPortrait && single ? "50%" : "100%";
-        if (flipbookEl.style.width !== w) {
-          flipbookEl.style.width = w;
-          flip.update();
+        const spread = currentSpread();
+        const single = spread.length === 1 && !isPortrait;
+        if (!single) {
+          flipbookEl.style.transform = "none";
+          return;
         }
+        const isLast = spread[0] === flip.pages.getPageCount() - 1;
+        flipbookEl.style.transform = `translateX(${isLast ? "25%" : "-25%"})`;
       };
 
       flip.loadFromImages(images);
