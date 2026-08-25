@@ -54,7 +54,8 @@
         images.push(canvas.toDataURL("image/jpeg", 0.92));
       }
 
-      const flip = new St.StPageFlip(flipbookEl, {
+      const FlipBook = St.PageFlip;
+      const flip = new FlipBook(flipbookEl, {
         width: TARGET_W,
         height: H,
         minWidth: 280,
