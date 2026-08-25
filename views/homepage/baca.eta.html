@@ -131,11 +131,6 @@
         updateInfo();
         applyBookWidth();
       });
-      // Event "flip" juga terpicu saat halaman ditarik/diseret
-      flip.on("flip", () => {
-        updateInfo();
-        applyBookWidth();
-      });
 
       // Suara kertas saat halaman dibuka (disintesis Web Audio API — tanpa file)
       let audioCtx = null;
@@ -175,9 +170,13 @@
           // audio tidak didukung — abaikan
         }
       };
-      // State berubah ke "flipping" = animasi balik halaman dimulai
-      flip.on("changeState", (e) => {
-        if (e.data === "flipping") playFlipSound();
+      // Suara kertas dipicu saat halaman benar-benar ganti (event "flip").
+      // Event ini terpicu untuk drag, scroll, tombol — dan snap-back
+      // (ditarik tanpa ganti halaman) tidak memicunya.
+      flip.on("flip", () => {
+        updateInfo();
+        applyBookWidth();
+        playFlipSound();
       });
 
       // Scroll mouse: maju (scroll bawah) / mundur (scroll atas)

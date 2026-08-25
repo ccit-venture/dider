@@ -98,7 +98,10 @@ expect(html).toContain("translateX(");
       // Suara kertas saat flip (Web Audio API sintesis)
       expect(html).toContain("AudioContext");
       expect(html).toContain("playFlipSound");
-      expect(html).toContain('flip.on("changeState"');
+      // Suara dipicu event "flip" (berlaku untuk drag/scroll/tombol),
+      // BUKAN "changeState" (yang tidak terpicu saat drag)
+      expect(html).toContain("playFlipSound()");
+      expect(html).not.toContain("changeState");
       // Nomor halaman ikut berubah saat ditarik (event flip)
       expect(html).toContain('flip.on("flip"');
       expect(html).toContain('flip.on("init"');
