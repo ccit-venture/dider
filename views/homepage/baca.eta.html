@@ -33,7 +33,9 @@
 
   (async () => {
     try {
-      const pdf = await pdfjsLib.getDocument("/uploads/<%= it.dokumen.pdf_path %>").promise;
+      const pdf = await pdfjsLib
+      .getDocument({ url: "/uploads/<%= it.dokumen.pdf_path %>" })
+      .promise;
       const first = await pdf.getPage(1);
       const base = first.getViewport({ scale: 1 });
       const TARGET_W = 640;

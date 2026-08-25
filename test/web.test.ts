@@ -181,6 +181,7 @@ describe("Web — dokumen (upload PDF, wajib login)", () => {
     expect(bacaHtml).toContain("/uploads/");
     expect(bacaHtml).toContain("page-flip");
     expect(bacaHtml).toContain("pdf.min.mjs");
+    expect(bacaHtml).toContain("getDocument({ url:");
 
     // POST /admin/dokumen/:id/delete — hapus
     const del = await app.request(`/admin/dokumen/${id}/delete`, {
