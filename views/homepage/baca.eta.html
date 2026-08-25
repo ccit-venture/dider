@@ -136,6 +136,67 @@
         updateInfo();
         applyBookWidth();
       });
+
+      // Suara kertas saat halaman dibuka (disintesis Web Audio API — tanpa file)
+      let audioCtx = null;
+      const playFlipSound = () => {
+        try {
+          if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          if (audioCtx.state === "suspended") audioCtx.resume();
+          const dur = 0.18;
+          const buffer = audioCtx.createBuffer(
+            1,
+            Math.ceil(audioCtx.sampleRate * dur),
+            audioCtx.sampleRate
+          );
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < data.length; i++) {
+            const t = i / data.length;
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2) * (0.5 + 0.5 * Math.sin(Math.PI * t));
+          }
+          const src = audioCtx.createBufferSource();
+          src.buffer = buffer;
+          const filter = audioCtx.createBiquadFilter();
+          filter.type = "bandpass";
+          filter.frequency.setValueAtTime(1400, audioCtx.currentTime);
+          filter.frequency.exponentialRampToValueAtTime(350, audioCtx.currentTime + dur);
+          filter.Q.value = 0.8;
+          const gain = audioCtx.createGain();
+          gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.4, audioCtx.currentTime + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+          src.connect(filter);
+          filter.connect(gain);
+          gain.connect(audioCtx.destination);
+          src.start();
+        } catch {
+          // audio tidak didukung — abaikan
+        }
+      };
+      // State berubah ke "flipping" = animasi balik halaman dimulai
+      flip.on("changeState", (e) => {
+        if (e.data === "flipping") playFlipSound();
+      });
+
+      // Scroll mouse: maju (scroll bawah) / mundur (scroll atas)
+      let wheelCooldown = false;
+      clipEl.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          if (wheelCooldown) return;
+          if (flip.flipController.getState() !== "read") return;
+          if (Math.abs(e.deltaY) < 10) return;
+          if (e.deltaY > 0) flip.flipNext();
+          else flip.flipPrev();
+          wheelCooldown = true;
+          setTimeout(() => (wheelCooldown = false), 350);
+        },
+        { passive: false }
+      );
+
       prevBtn.addEventListener("click", () => {
         flip.flipPrev();
         updateInfo();

@@ -91,6 +91,14 @@ expect(html).toContain("translateX(");
       expect(html).toContain("overflow-hidden");
       expect(html).toContain('flipbookEl.style.width = flipbookEl.clientWidth + "px"');
       expect(html).toContain("drawBookShadow = function");
+      // Scroll mouse: maju/mundur halaman (wheel + cooldown)
+      expect(html).toContain('"wheel"');
+      expect(html).toContain("wheelCooldown");
+      expect(html).toContain("e.deltaY");
+      // Suara kertas saat flip (Web Audio API sintesis)
+      expect(html).toContain("AudioContext");
+      expect(html).toContain("playFlipSound");
+      expect(html).toContain('flip.on("changeState"');
       // Nomor halaman ikut berubah saat ditarik (event flip)
       expect(html).toContain('flip.on("flip"');
       expect(html).toContain('flip.on("init"');
