@@ -43,19 +43,27 @@ export function migrate(db: Database) {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      nama TEXT NOT NULL,
-      ukuran TEXT NOT NULL,      -- JSON { lebar, tinggi } px @96dpi
-      halaman TEXT NOT NULL,     -- JSON array of halaman { id, blok: [...] }
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
-
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Migrasi skema lama → baru: projects lama (ukuran/halaman JSON) di-drop,
+  // diganti skema dokumen PDF (pdf_path).
+  const cols = db.query("PRAGMA table_info(projects)").all() as { name: string }[];
+  if (cols.length > 0 && !cols.some((c) => c.name === "pdf_path")) {
+    db.exec("DROP TABLE projects;");
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      nama TEXT NOT NULL,
+      pdf_path TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     );
   `);
 }

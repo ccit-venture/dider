@@ -1,0 +1,84 @@
+<% layout("/layouts/homepage") %>
+<% it.title = it.dokumen.nama + " — Dider" %>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-xl font-bold"><%= it.dokumen.nama %></h1>
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-700">← Kembali</a>
+</div>
+
+<p id="reader-status" class="text-center text-slate-500 py-10">Memuat dokumen…</p>
+<div id="flipbook" class="mx-auto"></div>
+
+<div class="mt-4 text-center space-x-3">
+  <button id="prev" class="border border-slate-300 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100">← Sebelumnya</button>
+  <span id="page-info" class="text-sm text-slate-500">-</span>
+  <button id="next" class="border border-slate-300 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100">Berikutnya →</button>
+</div>
+
+<div class="mt-4 text-center">
+  <a href="/uploads/<%= it.dokumen.pdf_path %>" class="text-indigo-600 hover:underline text-sm">Unduh PDF</a>
+</div>
+
+<link rel="stylesheet" href="/page-flip.css" />
+<script src="/vendor/page-flip/dist/js/page-flip.browser.js"></script>
+<script type="module">
+  import * as pdfjsLib from "/vendor/pdfjs-dist/build/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs-dist/build/pdf.worker.min.mjs";
+
+  const statusEl = document.getElementById("reader-status");
+  const flipbookEl = document.getElementById("flipbook");
+  const prevBtn = document.getElementById("prev");
+  const nextBtn = document.getElementById("next");
+  const pageInfo = document.getElementById("page-info");
+
+  (async () => {
+    try {
+      const pdf = await pdfjsLib.getDocument("/uploads/<%= it.dokumen.pdf_path %>").promise;
+      const first = await pdf.getPage(1);
+      const base = first.getViewport({ scale: 1 });
+      const TARGET_W = 640;
+      const scale = TARGET_W / base.width;
+      const H = Math.round(base.height * scale);
+
+      const images = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d");
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        images.push(canvas.toDataURL("image/jpeg", 0.92));
+      }
+
+      const flip = new St.StPageFlip(flipbookEl, {
+        width: TARGET_W,
+        height: H,
+        minWidth: 280,
+        maxWidth: TARGET_W,
+        size: "stretch",
+        showCover: false,
+        mobileScrollSupport: true,
+        swipeEnable: true,
+      });
+      flip.loadFromImages(images);
+      flip.updateFromHtml();
+
+      statusEl.style.display = "none";
+      const update = () =>
+        (pageInfo.textContent = "Halaman " + (flip.getCurrentPageIndex() + 1) + " / " + pdf.numPages);
+      prevBtn.addEventListener("click", () => {
+        flip.flipPrev();
+        update();
+      });
+      nextBtn.addEventListener("click", () => {
+        flip.flipNext();
+        update();
+      });
+      update();
+    } catch (err) {
+      statusEl.textContent = "Gagal memuat dokumen: " + (err?.message || err);
+    }
+  })();
+</script>

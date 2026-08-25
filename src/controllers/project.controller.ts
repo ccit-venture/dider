@@ -1,57 +1,15 @@
 import { Hono } from "hono";
+import { randomUUID } from "crypto";
+import { unlinkSync } from "fs";
 import type { Db } from "../db";
 import { ProjectModel } from "../models/project.model";
 import { requireAuth } from "../middleware/auth.middleware";
 import { view, redirect, flashSuccess, flashError } from "../view";
 
-const MAX_HALAMAN = 500;
-const MIN_SIZE = 50;
-const MAX_SIZE = 5000;
+const MAX_PDF_SIZE = 50 * 1024 * 1024; // 50MB
+const UPLOAD_DIR = "uploads"; // harus sinkron dengan serveStatic /uploads/* di app.ts
 
-type Parsed =
-  | { ok: true; nama: string; ukuran: unknown; halaman: unknown }
-  | { ok: false; errors: string[] };
-
-/** Validasi + parse input form proyek (nama, ukuran JSON, halaman JSON). */
-function parseProject(body: Record<string, unknown>): Parsed {
-  const errors: string[] = [];
-  const nama = String(body.nama ?? "").trim() || "Tanpa judul";
-
-  let ukuran: unknown = { lebar: 794, tinggi: 1123 };
-  let halaman: unknown = [];
-
-  try {
-    ukuran = JSON.parse(String(body.ukuran ?? ""));
-  } catch {
-    errors.push("Format ukuran halaman tidak valid.");
-  }
-  try {
-    halaman = JSON.parse(String(body.halaman ?? ""));
-  } catch {
-    errors.push("Format halaman tidak valid.");
-  }
-
-  if (!Array.isArray(halaman)) errors.push("Halaman harus berupa array.");
-  if (Array.isArray(halaman) && halaman.length > MAX_HALAMAN) {
-    errors.push(`Terlalu banyak halaman (maks ${MAX_HALAMAN}).`);
-  }
-
-  const u = ukuran as { lebar?: unknown; tinggi?: unknown };
-  if (
-    typeof u.lebar !== "number" ||
-    typeof u.tinggi !== "number" ||
-    u.lebar < MIN_SIZE ||
-    u.tinggi < MIN_SIZE ||
-    u.lebar > MAX_SIZE ||
-    u.tinggi > MAX_SIZE
-  ) {
-    errors.push(`Ukuran halaman harus antara ${MIN_SIZE}–${MAX_SIZE}px.`);
-  }
-
-  return errors.length ? { ok: false, errors } : { ok: true, nama, ukuran, halaman };
-}
-
-/** Controller web: /admin/editor — CRUD proyek via form POST (PRG). */
+/** Controller web: /admin/dokumen — upload PDF, daftar, hapus. */
 export function projectController(db: Db) {
   const app = new Hono();
 
@@ -62,62 +20,56 @@ export function projectController(db: Db) {
 
   const projects = new ProjectModel(db.sqlite);
 
-  // GET /admin/editor — daftar proyek
-  app.get("/editor", requireAuth(db), (c) => {
-    return view(c, "admin/editor/index", { projects: projects.list() });
+  // GET /admin/dokumen — daftar dokumen + form upload
+  app.get("/dokumen", requireAuth(db), (c) => {
+    return view(c, "admin/dokumen/index", { dokumen: projects.list() });
   });
 
-  // POST /admin/editor — buat proyek baru
-  app.post("/editor", requireAuth(db), async (c) => {
+  // POST /admin/dokumen — upload PDF
+  app.post("/dokumen", requireAuth(db), async (c) => {
     const body = await c.req.parseBody();
-    const parsed = parseProject(body as Record<string, unknown>);
-    if (!parsed.ok) {
-      flashError(c, parsed.errors.join(" "));
-      return redirect(c, "/admin/editor");
+    const nama = String(body.nama ?? "").trim() || "Tanpa judul";
+    const file = body.pdf;
+
+    if (!(file instanceof File)) {
+      flashError(c, "Pilih file PDF untuk di-upload.");
+      return redirect(c, "/admin/dokumen");
     }
-    const id = projects.create(parsed.nama, parsed.ukuran, parsed.halaman);
-    flashSuccess(c, "Proyek baru dibuat.");
-    return redirect(c, `/admin/editor/${id}`);
+    const isPdf =
+      file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      flashError(c, "Hanya file PDF yang diizinkan.");
+      return redirect(c, "/admin/dokumen");
+    }
+    if (file.size > MAX_PDF_SIZE) {
+      flashError(c, "Ukuran PDF maksimal 50MB.");
+      return redirect(c, "/admin/dokumen");
+    }
+
+    const id = randomUUID();
+    const pdfPath = `${UPLOAD_DIR}/${id}.pdf`;
+    await Bun.write(pdfPath, file);
+    projects.create(nama, pdfPath, id);
+    flashSuccess(c, `Dokumen "${nama}" berhasil di-upload.`);
+    return redirect(c, "/admin/dokumen");
   });
 
-  // GET /admin/editor/:id — buka editor
-  app.get("/editor/:id", requireAuth(db), (c) => {
-    const project = projects.findById(c.req.param("id"));
-    if (!project) {
-      flashError(c, "Proyek tidak ditemukan.");
-      return redirect(c, "/admin/editor");
-    }
-    return view(c, "admin/editor/show", { project });
-  });
-
-  // POST /admin/editor/:id — simpan/autosave
-  app.post("/editor/:id", requireAuth(db), async (c) => {
+  // POST /admin/dokumen/:id/delete — hapus dokumen (+ file)
+  app.post("/dokumen/:id/delete", requireAuth(db), (c) => {
     const id = c.req.param("id");
-    if (!projects.findById(id)) {
-      flashError(c, "Proyek tidak ditemukan.");
-      return redirect(c, "/admin/editor");
-    }
-    const body = await c.req.parseBody();
-    const parsed = parseProject(body as Record<string, unknown>);
-    if (!parsed.ok) {
-      flashError(c, parsed.errors.join(" "));
-      return redirect(c, `/admin/editor/${id}`);
-    }
-    projects.update(id, parsed.nama, parsed.ukuran, parsed.halaman);
-    flashSuccess(c, "Proyek tersimpan.");
-    return redirect(c, `/admin/editor/${id}`);
-  });
-
-  // POST /admin/editor/:id/delete — hapus proyek
-  app.post("/editor/:id/delete", requireAuth(db), (c) => {
-    const id = c.req.param("id");
-    if (!projects.findById(id)) {
-      flashError(c, "Proyek tidak ditemukan.");
-      return redirect(c, "/admin/editor");
+    const doc = projects.findById(id);
+    if (!doc) {
+      flashError(c, "Dokumen tidak ditemukan.");
+      return redirect(c, "/admin/dokumen");
     }
     projects.delete(id);
-    flashSuccess(c, "Proyek dihapus.");
-    return redirect(c, "/admin/editor");
+    try {
+      unlinkSync(doc.pdf_path);
+    } catch {
+      // file sudah tidak ada — abaikan
+    }
+    flashSuccess(c, `Dokumen "${doc.nama}" dihapus.`);
+    return redirect(c, "/admin/dokumen");
   });
 
   return app;

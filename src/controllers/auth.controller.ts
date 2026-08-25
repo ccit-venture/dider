@@ -39,7 +39,7 @@ export function authController(db: Db) {
 
     await createSession(c, db, id);
     flashSuccess(c, "Selamat datang!");
-    return redirect(c, "/admin/editor");
+    return redirect(c, "/admin/dokumen");
   });
 
   app.get("/register", redirectIfAuthenticated(db), (c) =>
@@ -67,7 +67,7 @@ export function authController(db: Db) {
     const id = await users.create(username, password, fullName || undefined);
     await createSession(c, db, id);
     flashSuccess(c, "Akun berhasil dibuat. Selamat datang!");
-    return redirect(c, "/admin/editor");
+    return redirect(c, "/admin/dokumen");
   });
 
   app.post("/logout", requireAuth(db), (c) => {
