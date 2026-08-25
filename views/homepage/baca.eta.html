@@ -7,7 +7,9 @@
 </div>
 
 <p id="reader-status" class="text-center text-slate-500 py-10">Memuat dokumen…</p>
-<div id="flipbook" class="mx-auto"></div>
+<div id="flipbook-clip" class="mx-auto overflow-hidden w-full">
+  <div id="flipbook" class="w-full"></div>
+</div>
 
 <div class="mt-4 text-center space-x-3">
   <button id="prev" class="border border-slate-300 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100">← Sebelumnya</button>
@@ -26,6 +28,7 @@
   pdfjsLib.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs-dist/build/pdf.worker.min.mjs";
 
   const statusEl = document.getElementById("reader-status");
+  const clipEl = document.getElementById("flipbook-clip");
   const flipbookEl = document.getElementById("flipbook");
   const prevBtn = document.getElementById("prev");
   const nextBtn = document.getElementById("next");
@@ -67,6 +70,12 @@
         usePortrait: true,
       });
 
+      flip.loadFromImages(images);
+
+      // Bekukan lebar buku (bundle set width:100% saat konstruksi & loadFromImages)
+      // agar clip 50% pada halaman tunggal tidak menyempitkan halaman
+      flipbookEl.style.width = flipbookEl.clientWidth + "px";
+
       // Spread aktif (1 = halaman tunggal, 2 = spread ganda)
       const currentSpread = () =>
         flip.pages.getSpread()[flip.pages.currentSpreadIndex] || [];
@@ -81,21 +90,41 @@
         }
       };
 
+      // Shadow punggung buku bawaan terlalu tebal → ganti versi tipis & halus
+      flip.render.drawBookShadow = function () {
+        const t = this.getRect();
+        this.ctx.save();
+        this.ctx.beginPath();
+        const e = Math.max(10, t.width / 60); // ~16px untuk buku 992
+        this.ctx.rect(t.left, t.top, t.width, t.height);
+        const i = { x: t.left + t.width / 2 - e / 2, y: 0 };
+        this.ctx.translate(i.x, i.y);
+        const s = this.ctx.createLinearGradient(0, 0, e, 0);
+        s.addColorStop(0, "rgba(0, 0, 0, 0)");
+        s.addColorStop(0.5, "rgba(0, 0, 0, 0.28)");
+        s.addColorStop(1, "rgba(0, 0, 0, 0)");
+        this.ctx.clip();
+        this.ctx.fillStyle = s;
+        this.ctx.fillRect(0, 0, e, 2 * t.height);
+        this.ctx.restore();
+      };
+
       // Sampul & halaman terakhir: halaman tunggal ukuran penuh di-tengahkan.
-      // Buku tetap 2 halaman lebar; geser buku agar halamannya (kanan/kiri) ke tengah.
+      // Buku 2 halaman lebar; clip (50%) hanya menampilkan separuh yang berisi
+      // halaman: cover (kanan) → buku digeser -50%, halaman terakhir (kiri) → tanpa geser.
       const applyBookWidth = () => {
         const isPortrait = flip.render.getOrientation() === "portrait";
         const spread = currentSpread();
         const single = spread.length === 1 && !isPortrait;
         if (!single) {
           flipbookEl.style.transform = "none";
+          clipEl.style.width = "100%";
           return;
         }
         const isLast = spread[0] === flip.pages.getPageCount() - 1;
-        flipbookEl.style.transform = `translateX(${isLast ? "25%" : "-25%"})`;
+        flipbookEl.style.transform = isLast ? "none" : "translateX(-50%)";
+        clipEl.style.width = "50%";
       };
-
-      flip.loadFromImages(images);
 
       statusEl.style.display = "none";
       flip.on("init", () => {

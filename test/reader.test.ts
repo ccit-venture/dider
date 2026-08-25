@@ -85,7 +85,12 @@ describe("Reader — bundle page-flip (flipbook)", () => {
       expect(html).not.toContain("updateFromHtml");
       // Sampul & halaman terakhir: halaman tunggal ukuran penuh di-tengahkan (translate)
       expect(html).toContain("applyBookWidth");
-      expect(html).toContain("translateX(");
+expect(html).toContain("translateX(");
+      // Separuh kosong buku ter-clip (overflow-hidden) agar tidak ada area putih besar
+      expect(html).toContain('id="flipbook-clip"');
+      expect(html).toContain("overflow-hidden");
+      expect(html).toContain('flipbookEl.style.width = flipbookEl.clientWidth + "px"');
+      expect(html).toContain("drawBookShadow = function");
       // Nomor halaman ikut berubah saat ditarik (event flip)
       expect(html).toContain('flip.on("flip"');
       expect(html).toContain('flip.on("init"');
