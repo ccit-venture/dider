@@ -16,7 +16,7 @@ export function pageController(db: Db) {
   app.get("/baca/:id", (c) => {
     if (!db.sqlite) return c.text("mode supabase belum diimplementasikan", 501);
     const doc = new ProjectModel(db.sqlite).findById(c.req.param("id"));
-    if (!doc) {
+    if (!doc || doc.deleted_at) {
       flashError(c, "Dokumen tidak ditemukan.");
       return redirect(c, "/");
     }

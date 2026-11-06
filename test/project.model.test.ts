@@ -43,4 +43,33 @@ describe("ProjectModel", () => {
 
     expect(projects.findById(id)).toBeNull();
   });
+
+  test("softDelete: hilang dari list, muncul di listTrashed, restore mengembalikan", () => {
+    const db = createTestDb();
+    const projects = new ProjectModel(db);
+
+    const id = projects.create("Majalah", "uploads/a.pdf");
+    projects.softDelete(id);
+
+    expect(projects.list()).toHaveLength(0);
+    expect(projects.listTrashed().map((p) => p.id)).toEqual([id]);
+    expect(projects.findById(id)?.deleted_at).toBeTruthy();
+
+    projects.restore(id);
+    expect(projects.list().map((p) => p.id)).toEqual([id]);
+    expect(projects.listTrashed()).toHaveLength(0);
+    expect(projects.findById(id)?.deleted_at).toBeNull();
+  });
+
+  test("softDelete dua kali tidak mengubah deleted_at", () => {
+    const db = createTestDb();
+    const projects = new ProjectModel(db);
+
+    const id = projects.create("Majalah", "uploads/a.pdf");
+    projects.softDelete(id);
+    const first = projects.findById(id)!.deleted_at;
+
+    projects.softDelete(id);
+    expect(projects.findById(id)!.deleted_at).toBe(first);
+  });
 });

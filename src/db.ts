@@ -66,4 +66,10 @@ export function migrate(db: Database) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // Soft delete: dokumen di-trash ditandai deleted_at (NULL = aktif).
+  const projectCols = db.query("PRAGMA table_info(projects)").all() as { name: string }[];
+  if (!projectCols.some((c) => c.name === "deleted_at")) {
+    db.exec("ALTER TABLE projects ADD COLUMN deleted_at TEXT;");
+  }
 }

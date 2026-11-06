@@ -4,7 +4,8 @@
     <div class="flex items-center gap-4 text-sm">
       <% if (it.user) { %>
         <span class="text-slate-500">Halo, <%= it.user.username %></span>
-        <a href="/admin/editor" class="hover:text-indigo-600">Editor</a>
+        <a href="/admin/dokumen" class="hover:text-indigo-600">Dokumen</a>
+        <a href="/admin/dokumen/trash" class="hover:text-indigo-600">Trash</a>
         <form method="post" action="/admin/logout" class="inline">
           <button type="submit" class="text-red-600 hover:text-red-700">Logout</button>
         </form>

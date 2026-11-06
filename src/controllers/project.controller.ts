@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { randomUUID } from "crypto";
 import { unlinkSync, existsSync } from "fs";
 import type { Db } from "../db";
@@ -9,7 +10,7 @@ import { view, redirect, flashSuccess, flashError } from "../view";
 const MAX_PDF_SIZE = 50 * 1024 * 1024; // 50MB
 const UPLOAD_DIR = "uploads"; // harus sinkron dengan serveStatic /uploads/* di app.ts
 
-/** Controller web: /admin/dokumen — upload PDF, daftar, hapus. */
+/** Controller web: /admin/dokumen — upload PDF, daftar, trash, hapus, restore. */
 export function projectController(db: Db) {
   const app = new Hono();
 
@@ -20,7 +21,7 @@ export function projectController(db: Db) {
 
   const projects = new ProjectModel(db.sqlite);
 
-  // GET /admin/dokumen — daftar dokumen + form upload
+  // GET /admin/dokumen — daftar dokumen aktif + form upload
   app.get("/dokumen", requireAuth(db), (c) => {
     const dokumen = projects.list().map((d) => ({
       ...d,
@@ -57,28 +58,86 @@ export function projectController(db: Db) {
       flashError(c, "Gagal menyimpan file PDF di server. Coba lagi.");
       return redirect(c, "/admin/dokumen");
     }
-    projects.create(nama, pdfPath, id);
+    try {
+      projects.create(nama, pdfPath, id);
+    } catch {
+      // Jangan tinggalkan file orphan kalau insert DB gagal.
+      try {
+        unlinkSync(pdfPath);
+      } catch {}
+      flashError(c, "Gagal menyimpan data dokumen. Coba lagi.");
+      return redirect(c, "/admin/dokumen");
+    }
     flashSuccess(c, `Dokumen "${nama}" berhasil di-upload.`);
     return redirect(c, "/admin/dokumen");
   });
 
-  // POST /admin/dokumen/:id/delete — hapus dokumen (+ file)
+  // GET /admin/dokumen/trash — daftar dokumen di trash
+  app.get("/dokumen/trash", requireAuth(db), (c) => {
+    const dokumen = projects.listTrashed().map((d) => ({
+      ...d,
+      missing: !existsSync(d.pdf_path),
+    }));
+    return view(c, "admin/dokumen/trash", { dokumen });
+  });
+
+  // POST /admin/dokumen/:id/delete — soft delete (masuk trash) atau hard delete
   app.post("/dokumen/:id/delete", requireAuth(db), (c) => {
+    return handleDelete(c, projects);
+  });
+
+  // POST /admin/dokumen/:id/hard-delete — hard delete dari halaman trash
+  app.post("/dokumen/:id/hard-delete", requireAuth(db), (c) => {
+    return handleDelete(c, projects, "hard");
+  });
+
+  // POST /admin/dokumen/:id/restore — restore dari trash
+  app.post("/dokumen/:id/restore", requireAuth(db), async (c) => {
     const id = c.req.param("id");
     const doc = projects.findById(id);
-    if (!doc) {
-      flashError(c, "Dokumen tidak ditemukan.");
-      return redirect(c, "/admin/dokumen");
+    if (!doc || !doc.deleted_at) {
+      flashError(c, "Dokumen tidak ditemukan di trash.");
+      return redirect(c, "/admin/dokumen/trash");
     }
-    projects.delete(id);
-    try {
-      unlinkSync(doc.pdf_path);
-    } catch {
-      // file sudah tidak ada — abaikan
-    }
-    flashSuccess(c, `Dokumen "${doc.nama}" dihapus.`);
-    return redirect(c, "/admin/dokumen");
+    projects.restore(id);
+    flashSuccess(c, `Dokumen "${doc.nama}" dipulihkan.`);
+    return redirect(c, "/admin/dokumen/trash");
   });
 
   return app;
+}
+
+/** Hapus dokumen: mode=soft (default) → trash, mode=hard → DB + file permanen. */
+async function handleDelete(c: Context, projects: ProjectModel, forcedMode?: "hard") {
+  const id = c.req.param("id");
+  const body = await c.req.parseBody();
+  const mode =
+    forcedMode === "hard" || String(body.mode ?? "soft") === "hard" ? "hard" : "soft";
+
+  const doc = projects.findById(id);
+  if (!doc) {
+    flashError(c, "Dokumen tidak ditemukan.");
+    return redirect(c, "/admin/dokumen");
+  }
+
+  if (mode === "soft") {
+    if (doc.deleted_at) {
+      flashError(c, "Dokumen sudah ada di trash.");
+      return redirect(c, "/admin/dokumen");
+    }
+    projects.softDelete(id);
+    flashSuccess(c, `Dokumen "${doc.nama}" dipindahkan ke trash.`);
+    return redirect(c, "/admin/dokumen");
+  }
+
+  // Hard delete: hapus baris dulu, lalu file. File orphan di-swallow (bukan
+  // kegagalan data), tapi baris DB wajib hilang.
+  projects.delete(id);
+  try {
+    unlinkSync(doc.pdf_path);
+  } catch {
+    // file sudah tidak ada — abaikan
+  }
+  flashSuccess(c, `Dokumen "${doc.nama}" dihapus permanen.`);
+  return redirect(c, doc.deleted_at ? "/admin/dokumen/trash" : "/admin/dokumen");
 }
