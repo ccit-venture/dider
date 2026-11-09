@@ -23,13 +23,26 @@ export function cookieFrom(res: Response): string {
     typeof res.headers.getSetCookie === "function"
       ? res.headers.getSetCookie()
       : [res.headers.get("set-cookie") ?? ""].filter(Boolean);
-  return cookies
-    .map((c) => c.split(";")[0])
-    .filter((c) => {
-      const value = c.slice(c.indexOf("=") + 1);
-      return value.length > 0;
-    })
-    .join("; ");
+  const byName = new Map<string, string>();
+  for (const c of cookies) {
+    const pair = c.split(";")[0];
+    const name = pair.slice(0, pair.indexOf("="));
+    const value = pair.slice(pair.indexOf("=") + 1);
+    if (value.length > 0) byName.set(name, pair);
+  }
+  return [...byName.values()].join("; ");
+}
+
+/** Gabung string cookie, last-wins per nama (seperti browser saat Set-Cookie berulang). */
+export function mergeCookies(...parts: string[]): string {
+  const byName = new Map<string, string>();
+  for (const part of parts) {
+    for (const pair of part.split(/;\s*/)) {
+      if (!pair) continue;
+      byName.set(pair.slice(0, pair.indexOf("=")), pair);
+    }
+  }
+  return [...byName.values()].join("; ");
 }
 
 /** Header dasar untuk form POST (origin wajib untuk csrf). */

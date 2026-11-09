@@ -3,6 +3,7 @@ import { unlinkSync, existsSync } from "fs";
 import {
   createTestApp,
   cookieFrom,
+  mergeCookies,
   formHeaders,
   formPostHeaders,
   registerUser,
@@ -474,7 +475,7 @@ describe("Web — soft delete & trash", () => {
     expect(res.status).toBe(302);
 
     const page = await app.request("/admin/dokumen", {
-      headers: { cookie: `${cookie}; ${cookieFrom(res)}` },
+      headers: { cookie: mergeCookies(cookie, cookieFrom(res)) },
     });
     expect(await page.text()).toContain("file PDF-nya tidak ditemukan");
   });
