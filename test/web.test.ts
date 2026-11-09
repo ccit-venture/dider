@@ -23,6 +23,26 @@ describe("Web — homepage", () => {
     const res = await app.request("/health");
     expect((await res.json()).driver).toBe("sqlite");
   });
+
+  test("navbar homepage tamu → tampil Login & Register", async () => {
+    const app = createTestApp();
+    const html = await (await app.request("/")).text();
+    const nav = html.slice(html.indexOf("<nav"), html.indexOf("</nav>"));
+    expect(nav).toContain('href="/admin/login"');
+    expect(nav).toContain('href="/admin/register"');
+    expect(nav).not.toContain("Logout");
+  });
+
+  test("navbar homepage user login → tampil Dokumen & Logout, tanpa tombol Register", async () => {
+    const app = createTestApp();
+    const cookie = await registerUser(app);
+    const html = await (await app.request("/", { headers: { cookie } })).text();
+    const nav = html.slice(html.indexOf("<nav"), html.indexOf("</nav>"));
+    expect(nav).toContain('href="/admin/dokumen"');
+    expect(nav).toContain('action="/admin/logout"');
+    expect(nav).not.toContain('href="/admin/register"');
+    expect(nav).toContain("Halo, admin");
+  });
 });
 
 describe("Web — auth", () => {
@@ -42,7 +62,7 @@ describe("Web — auth", () => {
     expect(await res.text()).toContain('action="/admin/register"');
   });
 
-  test("POST /admin/register → 302 /admin/editor + cookie session", async () => {
+  test("POST /admin/register → 302 /admin/dokumen + cookie session", async () => {
     const app = createTestApp();
     const res = await app.request("/admin/register", {
       method: "POST",
@@ -110,7 +130,7 @@ describe("Web — auth", () => {
     expect(cookieFrom(res)).toContain("sid=");
   });
 
-  test("sudah login → GET /admin/login redirect ke editor", async () => {
+  test("sudah login → GET /admin/login redirect ke /admin/dokumen", async () => {
     const app = createTestApp();
     const cookie = await registerUser(app);
 
@@ -130,9 +150,9 @@ describe("Web — auth", () => {
     expect(logout.status).toBe(302);
     expect(logout.headers.get("location")).toBe("/");
 
-    const editor = await app.request("/admin/dokumen", { headers: { cookie } });
-    expect(editor.status).toBe(302);
-    expect(editor.headers.get("location")).toBe("/admin/login");
+    const dokumen = await app.request("/admin/dokumen", { headers: { cookie } });
+    expect(dokumen.status).toBe(302);
+    expect(dokumen.headers.get("location")).toBe("/admin/login");
   });
 });
 
@@ -185,11 +205,10 @@ describe("Web — dokumen (upload PDF, wajib login)", () => {
     expect(bacaHtml).toContain("pdf.min.mjs");
     expect(bacaHtml).toContain("getDocument({ url:");
 
-    // POST /admin/dokumen/:id/delete — hapus permanen
-    const del = await app.request(`/admin/dokumen/${id}/delete`, {
+    // POST /admin/dokumen/:id/trash-and-delete — hapus permanen dari list
+    const del = await app.request(`/admin/dokumen/${id}/trash-and-delete`, {
       method: "POST",
       headers: { cookie, ...formPostHeaders },
-      body: new URLSearchParams({ mode: "hard" }).toString(),
     });
     expect(del.status).toBe(302);
     expect(del.headers.get("location")).toBe("/admin/dokumen");
@@ -275,11 +294,10 @@ describe("Web — dokumen (upload PDF, wajib login)", () => {
     const page = await app.request("/", { headers: { cookie: cookieFrom(baca) } });
     expect(await page.text()).toContain("File PDF tidak ditemukan");
 
-    // Bersihkan record via delete (unlink file gagal di-swallow)
-    await app.request(`/admin/dokumen/${id}/delete`, {
+    // Bersihkan record via trash-and-delete (unlink file gagal di-swallow)
+    await app.request(`/admin/dokumen/${id}/trash-and-delete`, {
       method: "POST",
       headers: { cookie, ...formPostHeaders },
-      body: new URLSearchParams({ mode: "hard" }).toString(),
     });
   });
 });
@@ -379,6 +397,85 @@ describe("Web — soft delete & trash", () => {
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/admin/dokumen/trash");
 
-    await post(app, `/admin/dokumen/${id}/delete`, cookie, "hard");
+    await post(app, `/admin/dokumen/${id}/trash-and-delete`, cookie);
+  });
+
+  test("POST /delete abaikan mode=hard → tetap soft delete (tidak bisa bypass trash)", async () => {
+    const app = createTestApp();
+    const cookie = await registerUser(app);
+    const id = await upload(app, cookie);
+
+    const del = await post(app, `/admin/dokumen/${id}/delete`, cookie, "hard");
+    expect(del.status).toBe(302);
+    expect(del.headers.get("location")).toBe("/admin/dokumen");
+
+    // Masih ada (soft) — file tetap & muncul di trash
+    expect(existsSync(`uploads/${id}.pdf`)).toBe(true);
+    const trash = await (await app.request("/admin/dokumen/trash", { headers: { cookie } })).text();
+    expect(trash).toContain(`/admin/dokumen/${id}/restore`);
+
+    await post(app, `/admin/dokumen/${id}/hard-delete`, cookie);
+  });
+
+  test("hard-delete dokumen aktif → ditolak, tidak dihapus", async () => {
+    const app = createTestApp();
+    const cookie = await registerUser(app);
+    const id = await upload(app, cookie);
+
+    const res = await post(app, `/admin/dokumen/${id}/hard-delete`, cookie);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/admin/dokumen");
+
+    // Masih ada di list aktif
+    const list = await (await app.request("/admin/dokumen", { headers: { cookie } })).text();
+    expect(list).toContain("Dokumen Trash");
+    expect(existsSync(`uploads/${id}.pdf`)).toBe(true);
+
+    await post(app, `/admin/dokumen/${id}/trash-and-delete`, cookie);
+  });
+
+  test("trash-and-delete dari list → baris & file hilang, redirect ke list", async () => {
+    const app = createTestApp();
+    const cookie = await registerUser(app);
+    const id = await upload(app, cookie);
+
+    const res = await post(app, `/admin/dokumen/${id}/trash-and-delete`, cookie);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/admin/dokumen");
+
+    expect(existsSync(`uploads/${id}.pdf`)).toBe(false);
+    const list = await (await app.request("/admin/dokumen", { headers: { cookie } })).text();
+    expect(list).not.toContain(`/baca/${id}`);
+  });
+
+  test("popup hapus menawarkan soft delete & hard delete (wiring form benar)", async () => {
+    const app = createTestApp();
+    const cookie = await registerUser(app);
+    const id = await upload(app, cookie);
+
+    const html = await (await app.request("/admin/dokumen", { headers: { cookie } })).text();
+    expect(html).toContain(`action="/admin/dokumen/${id}/delete"`);
+    expect(html).toContain(`formaction="/admin/dokumen/${id}/trash-and-delete"`);
+    expect(html).toContain('name="mode" value="soft"');
+    expect(html).toContain(`id="delete-${id}"`);
+
+    await post(app, `/admin/dokumen/${id}/trash-and-delete`, cookie);
+  });
+
+  test("restore dokumen yang file PDF-nya hilang → tetap dipulihkan, beri peringatan", async () => {
+    const app = createTestApp();
+    const cookie = await registerUser(app);
+    const id = await upload(app, cookie);
+
+    await post(app, `/admin/dokumen/${id}/delete`, cookie, "soft");
+    unlinkSync(`uploads/${id}.pdf`);
+
+    const res = await post(app, `/admin/dokumen/${id}/restore`, cookie);
+    expect(res.status).toBe(302);
+
+    const page = await app.request("/admin/dokumen", {
+      headers: { cookie: `${cookie}; ${cookieFrom(res)}` },
+    });
+    expect(await page.text()).toContain("file PDF-nya tidak ditemukan");
   });
 });

@@ -81,18 +81,21 @@ export function projectController(db: Db) {
     return view(c, "admin/dokumen/trash", { dokumen });
   });
 
-  // POST /admin/dokumen/:id/delete — soft delete (masuk trash) atau hard delete
-  app.post("/dokumen/:id/delete", requireAuth(db), (c) => {
-    return handleDelete(c, projects);
-  });
+  // POST /admin/dokumen/:id/delete — soft delete (masuk trash). Hard delete
+  // TIDAK lewat sini — wajib lewat /hard-delete eksplisit.
+  app.post("/dokumen/:id/delete", requireAuth(db), (c) => softDelete(c, projects));
 
-  // POST /admin/dokumen/:id/hard-delete — hard delete dari halaman trash
-  app.post("/dokumen/:id/hard-delete", requireAuth(db), (c) => {
-    return handleDelete(c, projects, "hard");
-  });
+  // POST /admin/dokumen/:id/hard-delete — hard delete permanen (dari trash)
+  app.post("/dokumen/:id/hard-delete", requireAuth(db), (c) => hardDelete(c, projects));
+
+  // POST /admin/dokumen/:id/trash-and-delete — dari popup halaman utama:
+  // pindahkan ke trash lalu hapus permanen dalam satu aksi eksplisit.
+  app.post("/dokumen/:id/trash-and-delete", requireAuth(db), (c) =>
+    hardDelete(c, projects, { allowActive: true })
+  );
 
   // POST /admin/dokumen/:id/restore — restore dari trash
-  app.post("/dokumen/:id/restore", requireAuth(db), async (c) => {
+  app.post("/dokumen/:id/restore", requireAuth(db), (c) => {
     const id = c.req.param("id");
     const doc = projects.findById(id);
     if (!doc || !doc.deleted_at) {
@@ -100,38 +103,55 @@ export function projectController(db: Db) {
       return redirect(c, "/admin/dokumen/trash");
     }
     projects.restore(id);
-    flashSuccess(c, `Dokumen "${doc.nama}" dipulihkan.`);
+    if (existsSync(doc.pdf_path)) {
+      flashSuccess(c, `Dokumen "${doc.nama}" dipulihkan.`);
+    } else {
+      flashError(
+        c,
+        `Dokumen "${doc.nama}" dipulihkan, tetapi file PDF-nya tidak ditemukan di server.`
+      );
+    }
     return redirect(c, "/admin/dokumen/trash");
   });
 
   return app;
 }
 
-/** Hapus dokumen: mode=soft (default) → trash, mode=hard → DB + file permanen. */
-async function handleDelete(c: Context, projects: ProjectModel, forcedMode?: "hard") {
+/** Soft delete: pindahkan ke trash. File PDF tetap di disk. */
+function softDelete(c: Context, projects: ProjectModel) {
   const id = c.req.param("id");
-  const body = await c.req.parseBody();
-  const mode =
-    forcedMode === "hard" || String(body.mode ?? "soft") === "hard" ? "hard" : "soft";
-
   const doc = projects.findById(id);
   if (!doc) {
     flashError(c, "Dokumen tidak ditemukan.");
     return redirect(c, "/admin/dokumen");
   }
-
-  if (mode === "soft") {
-    if (doc.deleted_at) {
-      flashError(c, "Dokumen sudah ada di trash.");
-      return redirect(c, "/admin/dokumen");
-    }
-    projects.softDelete(id);
-    flashSuccess(c, `Dokumen "${doc.nama}" dipindahkan ke trash.`);
+  if (doc.deleted_at) {
+    flashError(c, "Dokumen sudah ada di trash.");
     return redirect(c, "/admin/dokumen");
   }
+  projects.softDelete(id);
+  flashSuccess(c, `Dokumen "${doc.nama}" dipindahkan ke trash.`);
+  return redirect(c, "/admin/dokumen");
+}
 
-  // Hard delete: hapus baris dulu, lalu file. File orphan di-swallow (bukan
-  // kegagalan data), tapi baris DB wajib hilang.
+/** Hard delete: hapus baris DB + file permanen. Default hanya dari trash. */
+function hardDelete(
+  c: Context,
+  projects: ProjectModel,
+  opts: { allowActive?: boolean } = {}
+) {
+  const id = c.req.param("id");
+  const doc = projects.findById(id);
+  if (!doc) {
+    flashError(c, "Dokumen tidak ditemukan.");
+    return redirect(c, "/admin/dokumen/trash");
+  }
+  if (!doc.deleted_at && !opts.allowActive) {
+    flashError(c, "Dokumen belum di trash. Pindahkan ke trash dulu.");
+    return redirect(c, "/admin/dokumen");
+  }
+  const fromTrash = Boolean(doc.deleted_at);
+  // Hapus baris dulu, lalu file. File orphan di-swallow (bukan kegagalan data).
   projects.delete(id);
   try {
     unlinkSync(doc.pdf_path);
@@ -139,5 +159,5 @@ async function handleDelete(c: Context, projects: ProjectModel, forcedMode?: "ha
     // file sudah tidak ada — abaikan
   }
   flashSuccess(c, `Dokumen "${doc.nama}" dihapus permanen.`);
-  return redirect(c, doc.deleted_at ? "/admin/dokumen/trash" : "/admin/dokumen");
+  return redirect(c, fromTrash ? "/admin/dokumen/trash" : "/admin/dokumen");
 }

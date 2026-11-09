@@ -49,7 +49,7 @@
               <div class="space-y-2">
                 <button name="mode" value="soft"
                   class="w-full bg-amber-500 text-white font-semibold py-2 rounded-lg hover:bg-amber-600">Pindahkan ke Trash</button>
-                <button name="mode" value="hard"
+                <button type="submit" formaction="/admin/dokumen/<%= d.id %>/trash-and-delete"
                   class="w-full bg-red-600 text-white font-semibold py-2 rounded-lg hover:bg-red-700">Hapus Permanen</button>
                 <button type="button" onclick="this.closest('dialog').close()"
                   class="w-full border border-slate-300 font-semibold py-2 rounded-lg hover:bg-slate-100">Batal</button>
