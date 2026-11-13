@@ -72,4 +72,11 @@ export function migrate(db: Database) {
   if (!projectCols.some((c) => c.name === "deleted_at")) {
     db.exec("ALTER TABLE projects ADD COLUMN deleted_at TEXT;");
   }
+  // Bookshelf: kategori (default 'latest') + jumlah tampil (untuk 'popular').
+  if (!projectCols.some((c) => c.name === "kategori")) {
+    db.exec("ALTER TABLE projects ADD COLUMN kategori TEXT NOT NULL DEFAULT 'latest';");
+  }
+  if (!projectCols.some((c) => c.name === "views")) {
+    db.exec("ALTER TABLE projects ADD COLUMN views INTEGER NOT NULL DEFAULT 0;");
+  }
 }

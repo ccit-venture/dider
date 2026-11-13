@@ -72,4 +72,49 @@ describe("ProjectModel", () => {
     projects.softDelete(id);
     expect(projects.findById(id)!.deleted_at).toBe(first);
   });
+
+  test("create default kategori 'latest', views 0", () => {
+    const db = createTestDb();
+    const projects = new ProjectModel(db);
+
+    const id = projects.create("Majalah", "uploads/a.pdf");
+    const p = projects.findById(id)!;
+    expect(p.kategori).toBe("latest");
+    expect(p.views).toBe(0);
+  });
+
+  test("listShelf('popular') urut dari views terbanyak", () => {
+    const db = createTestDb();
+    const projects = new ProjectModel(db);
+
+    const a = projects.create("A", "uploads/a.pdf");
+    const b = projects.create("B", "uploads/b.pdf");
+    projects.incrementViews(b);
+    projects.incrementViews(b);
+    projects.incrementViews(a);
+
+    expect(projects.listShelf("popular").map((p) => p.id)).toEqual([b, a]);
+  });
+
+  test("listShelf(kategori) memfilter kategori & categories() unik", () => {
+    const db = createTestDb();
+    const projects = new ProjectModel(db);
+
+    projects.create("A", "uploads/a.pdf", undefined, "majalah");
+    projects.create("B", "uploads/b.pdf", undefined, "majalah");
+    projects.create("C", "uploads/c.pdf", undefined, "novel");
+
+    expect(projects.listShelf("majalah")).toHaveLength(2);
+    expect(projects.categories().sort()).toEqual(["majalah", "novel"]);
+  });
+
+  test("incrementViews menambah hitungan tampil", () => {
+    const db = createTestDb();
+    const projects = new ProjectModel(db);
+
+    const id = projects.create("Majalah", "uploads/a.pdf");
+    projects.incrementViews(id);
+    projects.incrementViews(id);
+    expect(projects.findById(id)!.views).toBe(2);
+  });
 });

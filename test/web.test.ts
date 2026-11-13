@@ -19,6 +19,21 @@ describe("Web — homepage", () => {
     expect(html).toContain("/admin/login");
   });
 
+  test("GET / → rak buku tampil, section 'Dokumen Terbaru' hilang", async () => {
+    const app = createTestApp();
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("Rak Buku");
+    expect(html).not.toContain("Dokumen Terbaru");
+    expect(html).toContain("?rak=latest");
+    expect(html).toContain("?rak=popular");
+  });
+
+  test("GET /?rak=popular → filter popular aktif", async () => {
+    const app = createTestApp();
+    const html = await (await app.request("/?rak=popular")).text();
+    expect(html).toContain("bg-indigo-600 text-white");
+  });
+
   test("GET /health → driver sqlite", async () => {
     const app = createTestApp();
     const res = await app.request("/health");
@@ -206,6 +221,10 @@ describe("Web — dokumen (upload PDF, wajib login)", () => {
     expect(bacaHtml).toContain("pdf.min.mjs");
     expect(bacaHtml).toContain("getDocument({ url:");
 
+    // Reader menaikkan views (untuk rak 'popular')
+    const listAfter = await (await app.request("/admin/dokumen", { headers: { cookie } })).text();
+    expect(listAfter).toContain("Majalah Angkatan");
+
     // POST /admin/dokumen/:id/trash-and-delete — hapus permanen dari list
     const del = await app.request(`/admin/dokumen/${id}/trash-and-delete`, {
       method: "POST",
@@ -371,7 +390,7 @@ describe("Web — soft delete & trash", () => {
     const baca = await app.request(`/baca/${id}`);
     expect(baca.status).toBe(200);
 
-    await post(app, `/admin/dokumen/${id}/hard-delete`, cookie);
+    await post(app, `/admin/dokumen/${id}/trash-and-delete`, cookie);
   });
 
   test("hard delete dari trash → baris & file hilang permanen", async () => {
