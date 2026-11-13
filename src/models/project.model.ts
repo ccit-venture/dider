@@ -21,8 +21,8 @@ export type ProjectSummary = Pick<
   uploader: string | null;
 };
 
-/** Urutan rak buku: 'latest' = terbaru, 'popular' = paling banyak dibaca, lainnya = filter kategori. */
-export type ShelfSort = "latest" | "popular" | string;
+/** Urutan rak buku: 'latest' = terbaru, 'popular' = paling banyak dibaca. */
+export type ShelfSort = "latest" | "popular";
 
 const SHELF_SELECT = `
   SELECT p.id, p.nama, p.pdf_path, p.kategori, p.views, p.uploader_id,
@@ -43,7 +43,7 @@ export class ProjectModel {
       .all() as ProjectSummary[];
   }
 
-  /** List dokumen untuk rak: sort 'latest'/'popular' atau filter kategori. */
+  /** List dokumen untuk rak: sort 'latest' (terbaru) atau 'popular' (paling dibaca). */
   listShelf(sort: ShelfSort = "latest"): ProjectSummary[] {
     if (sort === "popular") {
       return this.db
@@ -52,25 +52,7 @@ export class ProjectModel {
         )
         .all() as ProjectSummary[];
     }
-    if (sort === "latest") {
-      return this.list();
-    }
-    return this.db
-      .query(
-        `${SHELF_SELECT} WHERE p.deleted_at IS NULL AND p.kategori = ? ORDER BY p.updated_at DESC`
-      )
-      .all(sort) as ProjectSummary[];
-  }
-
-  /** Daftar kategori yang tersedia (unik, dari dokumen aktif). */
-  categories(): string[] {
-    return (
-      this.db
-        .query(
-          "SELECT DISTINCT kategori FROM projects WHERE deleted_at IS NULL ORDER BY kategori"
-        )
-        .all() as { kategori: string }[]
-    ).map((r) => r.kategori);
+    return this.list();
   }
 
   /** List dokumen di trash (deleted_at terisi), terbaru di-trash dulu. */
@@ -94,14 +76,13 @@ export class ProjectModel {
     nama: string,
     pdfPath: string,
     id: string = randomUUID(),
-    kategori = "latest",
     uploaderId: string | null = null
   ): string {
     this.db
       .query(
-        "INSERT INTO projects (id, nama, pdf_path, kategori, uploader_id) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO projects (id, nama, pdf_path, kategori, uploader_id) VALUES (?, ?, ?, 'latest', ?)"
       )
-      .run(id, nama, pdfPath, kategori || "latest", uploaderId);
+      .run(id, nama, pdfPath, uploaderId);
     return id;
   }
 

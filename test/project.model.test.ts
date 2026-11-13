@@ -96,16 +96,15 @@ describe("ProjectModel", () => {
     expect(projects.listShelf("popular").map((p) => p.id)).toEqual([b, a]);
   });
 
-  test("listShelf(kategori) memfilter kategori & categories() unik", () => {
+  test("listShelf('latest') urut dari terbaru", () => {
     const db = createTestDb();
     const projects = new ProjectModel(db);
 
-    projects.create("A", "uploads/a.pdf", undefined, "majalah");
-    projects.create("B", "uploads/b.pdf", undefined, "majalah");
-    projects.create("C", "uploads/c.pdf", undefined, "novel");
+    const a = projects.create("A", "uploads/a.pdf");
+    const b = projects.create("B", "uploads/b.pdf");
+    db.query("UPDATE projects SET updated_at = datetime('now','-1 day') WHERE id = ?").run(a);
 
-    expect(projects.listShelf("majalah")).toHaveLength(2);
-    expect(projects.categories().sort()).toEqual(["majalah", "novel"]);
+    expect(projects.listShelf("latest").map((p) => p.id)).toEqual([b, a]);
   });
 
   test("incrementViews menambah hitungan tampil", () => {
@@ -124,7 +123,7 @@ describe("ProjectModel", () => {
     const { UserModel } = await import("../src/models/user.model");
     const userId = await new UserModel(db).create("admin", "rahasia123", "Admin Dider");
 
-    const id = projects.create("Majalah", "uploads/a.pdf", undefined, "latest", userId);
+    const id = projects.create("Majalah", "uploads/a.pdf", undefined, userId);
     const p = projects.findById(id)!;
     expect(p.uploader_id).toBe(userId);
     expect(p.uploader).toBe("Admin Dider");

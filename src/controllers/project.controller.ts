@@ -34,7 +34,6 @@ export function projectController(db: Db) {
   app.post("/dokumen", requireAuth(db), async (c) => {
     const body = await c.req.parseBody();
     const nama = String(body.nama ?? "").trim() || "Tanpa judul";
-    const kategori = String(body.kategori ?? "").trim() || "latest";
     const file = body.pdf;
     const uploaderId = (c.get("userId" as never) as string | undefined) ?? null;
 
@@ -61,7 +60,7 @@ export function projectController(db: Db) {
       return redirect(c, "/admin/dokumen");
     }
     try {
-      projects.create(nama, pdfPath, id, kategori, uploaderId);
+      projects.create(nama, pdfPath, id, uploaderId);
     } catch {
       // Jangan tinggalkan file orphan kalau insert DB gagal.
       try {

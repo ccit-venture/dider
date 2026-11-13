@@ -10,10 +10,9 @@ export function pageController(db: Db) {
 
   app.get("/", (c) => {
     const projects = db.sqlite ? new ProjectModel(db.sqlite) : null;
-    const rak = c.req.query("rak") || "latest";
+    const rak = c.req.query("rak") === "popular" ? "popular" : "latest";
     const dokumen = projects ? projects.listShelf(rak) : [];
-    const kategori = projects ? projects.categories() : [];
-    return view(c, "homepage/index", { dokumen, rak, kategori });
+    return view(c, "homepage/index", { dokumen, rak });
   });
 
   app.get("/baca/:id", (c) => {
