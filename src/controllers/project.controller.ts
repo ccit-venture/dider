@@ -36,6 +36,7 @@ export function projectController(db: Db) {
     const nama = String(body.nama ?? "").trim() || "Tanpa judul";
     const kategori = String(body.kategori ?? "").trim() || "latest";
     const file = body.pdf;
+    const uploaderId = (c.get("userId" as never) as string | undefined) ?? null;
 
     if (!(file instanceof File)) {
       flashError(c, "Pilih file PDF untuk di-upload.");
@@ -60,7 +61,7 @@ export function projectController(db: Db) {
       return redirect(c, "/admin/dokumen");
     }
     try {
-      projects.create(nama, pdfPath, id, kategori);
+      projects.create(nama, pdfPath, id, kategori, uploaderId);
     } catch {
       // Jangan tinggalkan file orphan kalau insert DB gagal.
       try {

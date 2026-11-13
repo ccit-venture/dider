@@ -34,6 +34,31 @@ describe("Web — homepage", () => {
     expect(html).toContain("bg-indigo-600 text-white");
   });
 
+  test("kartu rak menampilkan uploader & tanggal upload", async () => {
+    const app = createTestApp();
+    const cookie = await registerUser(app, "hudya", "rahasia123");
+
+    const form = new FormData();
+    form.append("nama", "Majalah Sumber");
+    form.append("pdf", new File(["%PDF-1.4\n%%EOF"], "m.pdf", { type: "application/pdf" }));
+    await app.request("/admin/dokumen", {
+      method: "POST",
+      headers: { cookie, ...formHeaders },
+      body: form,
+    });
+
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("oleh hudya");
+    expect(html).toMatch(/oleh hudya · \d{1,2} [A-Z][a-z]+ \d{4}/);
+
+    const list = await (await app.request("/admin/dokumen", { headers: { cookie } })).text();
+    const id = list.match(/\/baca\/([0-9a-f-]+)/)![1];
+    await app.request(`/admin/dokumen/${id}/trash-and-delete`, {
+      method: "POST",
+      headers: { cookie, ...formPostHeaders },
+    });
+  });
+
   test("GET /health → driver sqlite", async () => {
     const app = createTestApp();
     const res = await app.request("/health");

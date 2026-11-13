@@ -117,4 +117,28 @@ describe("ProjectModel", () => {
     projects.incrementViews(id);
     expect(projects.findById(id)!.views).toBe(2);
   });
+
+  test("create menyimpan uploader_id & list join nama uploader", async () => {
+    const db = createTestDb();
+    const projects = new ProjectModel(db);
+    const { UserModel } = await import("../src/models/user.model");
+    const userId = await new UserModel(db).create("admin", "rahasia123", "Admin Dider");
+
+    const id = projects.create("Majalah", "uploads/a.pdf", undefined, "latest", userId);
+    const p = projects.findById(id)!;
+    expect(p.uploader_id).toBe(userId);
+    expect(p.uploader).toBe("Admin Dider");
+
+    expect(projects.list()[0].uploader).toBe("Admin Dider");
+  });
+
+  test("uploader null (data lama) → uploader tetap null, tidak error", () => {
+    const db = createTestDb();
+    const projects = new ProjectModel(db);
+
+    const id = projects.create("Majalah", "uploads/a.pdf");
+    const p = projects.findById(id)!;
+    expect(p.uploader_id).toBeNull();
+    expect(p.uploader).toBeNull();
+  });
 });

@@ -42,6 +42,7 @@
           <div class="p-2">
             <p class="text-sm font-semibold leading-tight line-clamp-2 group-hover:text-indigo-600"><%= d.nama %></p>
             <p class="text-xs text-slate-400 mt-1"><%= d.kategori %> · <%= d.views %> dibaca</p>
+            <p class="text-xs text-slate-400 mt-0.5">oleh <%= d.uploader ?? "Anonim" %> · <%= it.formatTanggal(d.created_at) %></p>
           </div>
         </a>
       <% }) %>

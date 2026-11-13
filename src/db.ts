@@ -79,4 +79,8 @@ export function migrate(db: Database) {
   if (!projectCols.some((c) => c.name === "views")) {
     db.exec("ALTER TABLE projects ADD COLUMN views INTEGER NOT NULL DEFAULT 0;");
   }
+  // Sumber buku: user yang meng-upload (NULL untuk data lama).
+  if (!projectCols.some((c) => c.name === "uploader_id")) {
+    db.exec("ALTER TABLE projects ADD COLUMN uploader_id TEXT;");
+  }
 }
