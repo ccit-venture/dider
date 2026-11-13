@@ -60,11 +60,11 @@ dider/
 │   ├── models/                 # MODEL — akses data / query SQL
 │   │   ├── user.model.ts       #   users: register, verifyPassword (argon2)
 │   │   ├── session.model.ts    #   sessions: create/find/delete session cookie
-│   │   └── project.model.ts    #   projects (dokumen PDF): create, list, findById, delete
+│   │   └── project.model.ts    #   projects: list/listShelf/listTrashed, create, incrementViews, softDelete, restore, delete
 │   ├── controllers/            # CONTROLLER — form POST → model → view/redirect
 │   │   ├── auth.controller.ts  #   /admin/login, /admin/register, /admin/logout
-│   │   ├── page.controller.ts  #   GET / (homepage), GET /baca/:id (reader)
-│   │   └── project.controller.ts # /admin/dokumen* — upload PDF, list, hapus
+│   │   ├── page.controller.ts  #   GET / (rak buku), GET /baca/:id (reader, +views)
+│   │   └── project.controller.ts # /admin/dokumen* — upload, list, trash, restore, hapus
 │   ├── middleware/
 │   │   ├── auth.middleware.ts  # session helpers + requireAuth + guest
 │   │   └── locals.middleware.ts # inject user login + flash ke context
@@ -100,9 +100,9 @@ Build CSS produksi: `bun run build:css` — hasilnya `public/style.css`.
 
 | Method | Path | View / Aksi | Auth |
 |--------|------|-------------|------|
-| GET | `/` | `homepage/index` — daftar dokumen | - |
+| GET | `/` | `homepage/index` — rak buku (`?rak=latest\|popular`) | - |
 | GET | `/health` | health check | - |
-| GET | `/baca/:id` | `homepage/baca` — reader flipbook | - |
+| GET | `/baca/:id` | `homepage/baca` — reader flipbook; menambah `views` | - |
 | GET | `/admin/login` | `admin/auth/login` | guest |
 | POST | `/admin/login` | login → `/admin/dokumen` | guest |
 | GET | `/admin/register` | `admin/auth/register` | guest |
@@ -110,11 +110,16 @@ Build CSS produksi: `bun run build:css` — hasilnya `public/style.css`.
 | POST | `/admin/logout` | logout → `/` | ✓ |
 | GET | `/admin/dokumen` | `admin/dokumen/index` — list + form upload | ✓ |
 | POST | `/admin/dokumen` | upload PDF (multipart) | ✓ |
-| POST | `/admin/dokumen/:id/delete` | hapus dokumen + file | ✓ |
+| POST | `/admin/dokumen/:id/delete` | soft delete → trash (file tetap) | ✓ |
+| GET | `/admin/dokumen/trash` | `admin/dokumen/trash` — daftar di trash | ✓ |
+| POST | `/admin/dokumen/:id/restore` | pulihkan dari trash | ✓ |
+| POST | `/admin/dokumen/:id/hard-delete` | hapus permanen (hanya dari trash) | ✓ |
+| POST | `/admin/dokumen/:id/trash-and-delete` | hapus permanen langsung dari daftar | ✓ |
 
 Semua mutasi via form POST (PRG). Upload divalidasi: hanya `application/pdf`
 (atau ekstensi `.pdf`), maksimal **50MB**, disimpan sebagai
-`uploads/<uuid>.pdf`.
+`uploads/<uuid>.pdf`. Session berlaku 7 hari (`SESSION_TTL_DAYS`) dan session
+kedaluwarsa dibersihkan saat login baru dibuat.
 
 ---
 
@@ -129,10 +134,10 @@ tidak menyentuh `data/app.db`. Cakupan saat ini:
 
 | File | Menguji |
 |---|---|
-| `test/session.model.test.ts` | create/find/delete session |
+| `test/session.model.test.ts` | create/find/delete session, TTL 7 hari |
 | `test/user.model.test.ts` | register, verifyPassword, tanpa bocor hash |
-| `test/project.model.test.ts` | CRUD dokumen (nama + pdf_path) |
-| `test/web.test.ts` | render view, auth flow, upload PDF (valid/invalid), reader, hapus, flash |
+| `test/project.model.test.ts` | CRUD dokumen, rak latest/popular, views, soft delete, trash, restore |
+| `test/web.test.ts` | render view, auth flow, upload PDF (valid/invalid), reader, rak buku, soft delete/trash/restore/hard delete, flash |
 
 CI otomatis menjalankan `bun test` + `bun run build:css` di setiap push/PR ke
 `master`.
@@ -157,9 +162,10 @@ Catatan: route saat ini **sqlite-first**. Saat pindah Supabase, tambahkan branch
 
 ## Roadmap
 
-- **Sampul & thumbnail** — tampilkan preview halaman pertama di daftar dokumen.
+- **Thumbnail sampul tersimpan** — sampul kini dirender pdf.js di browser; simpan hasilnya agar rak tidak perlu mengunduh PDF.
 - **Mode layar penuh** — pengalaman baca imersif ala pubhtml5.
-- **Supabase driver** — implementasikan branch `db.supabase` di controller.
+- **Supabase driver** — implementasikan branch `db.supabase` di controller ([#4](https://github.com/ccit-venture/dider/issues/4)).
+- **Duplikasi dokumen** — salin dokumen dengan id baru ([#6](https://github.com/ccit-venture/dider/issues/6)).
 
 Lihat [issue-issue](https://github.com/ccit-venture/dider/issues) untuk daftar
 pekerjaan yang sedang/akan dikerjakan.
@@ -186,9 +192,10 @@ keamanan, jangan buka issue publik — lihat [SECURITY.md](SECURITY.md).
 
 ## Kontributor
 
-| Nama | Peran |
-|------|-------|
-| Muhammad Hudya Ramadhana | Maintainer, backend & API |
+| Nama | GitHub | Peran |
+|------|--------|-------|
+| Muhammad Hudya Ramadhana | [@perogeremmer](https://github.com/perogeremmer) | Maintainer, backend & API |
+| Aqib Java Abdullah | [@aqib-java](https://github.com/aqib-java) | Rak buku & katalog ([#9](https://github.com/ccit-venture/dider/pull/9)), trash & soft delete ([#10](https://github.com/ccit-venture/dider/pull/10)) |
 
 **Institusi:** CEP CCIT-FTUI
 
