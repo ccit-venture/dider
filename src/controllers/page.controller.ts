@@ -9,14 +9,17 @@ export function pageController(db: Db) {
   const app = new Hono();
 
   app.get("/", (c) => {
-    const dokumen = db.sqlite ? new ProjectModel(db.sqlite).list() : [];
-    return view(c, "homepage/index", { dokumen });
+    const projects = db.sqlite ? new ProjectModel(db.sqlite) : null;
+    const rak = c.req.query("rak") === "popular" ? "popular" : "latest";
+    const dokumen = projects ? projects.listShelf(rak) : [];
+    return view(c, "homepage/index", { dokumen, rak });
   });
 
   app.get("/baca/:id", (c) => {
     if (!db.sqlite) return c.text("mode supabase belum diimplementasikan", 501);
-    const doc = new ProjectModel(db.sqlite).findById(c.req.param("id"));
-    if (!doc) {
+    const projects = new ProjectModel(db.sqlite);
+    const doc = projects.findById(c.req.param("id"));
+    if (!doc || doc.deleted_at) {
       flashError(c, "Dokumen tidak ditemukan.");
       return redirect(c, "/");
     }
@@ -24,6 +27,7 @@ export function pageController(db: Db) {
       flashError(c, "File PDF tidak ditemukan di server. Upload ulang dokumen ini.");
       return redirect(c, "/");
     }
+    projects.incrementViews(doc.id);
     // pdf_path di DB = "uploads/x.pdf"; view butuh nama file saja untuk URL /uploads/...
     const dokumen = { ...doc, pdf_path: doc.pdf_path.replace(/^uploads\//, "") };
     return view(c, "homepage/baca", { dokumen });

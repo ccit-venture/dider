@@ -66,4 +66,21 @@ export function migrate(db: Database) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // Soft delete: dokumen di-trash ditandai deleted_at (NULL = aktif).
+  const projectCols = db.query("PRAGMA table_info(projects)").all() as { name: string }[];
+  if (!projectCols.some((c) => c.name === "deleted_at")) {
+    db.exec("ALTER TABLE projects ADD COLUMN deleted_at TEXT;");
+  }
+  // Bookshelf: kategori (default 'latest') + jumlah tampil (untuk 'popular').
+  if (!projectCols.some((c) => c.name === "kategori")) {
+    db.exec("ALTER TABLE projects ADD COLUMN kategori TEXT NOT NULL DEFAULT 'latest';");
+  }
+  if (!projectCols.some((c) => c.name === "views")) {
+    db.exec("ALTER TABLE projects ADD COLUMN views INTEGER NOT NULL DEFAULT 0;");
+  }
+  // Sumber buku: user yang meng-upload (NULL untuk data lama).
+  if (!projectCols.some((c) => c.name === "uploader_id")) {
+    db.exec("ALTER TABLE projects ADD COLUMN uploader_id TEXT;");
+  }
 }

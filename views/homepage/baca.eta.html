@@ -2,7 +2,12 @@
 <% it.title = it.dokumen.nama + " — Dider" %>
 
 <div class="flex items-center justify-between mb-6">
-  <h1 class="text-xl font-bold"><%= it.dokumen.nama %></h1>
+  <div>
+    <h1 class="text-xl font-bold"><%= it.dokumen.nama %></h1>
+    <p class="text-sm text-slate-500 mt-1">
+      oleh <%= it.dokumen.uploader ?? "Anonim" %> · <%= it.formatTanggal(it.dokumen.created_at) %>
+    </p>
+  </div>
   <a href="/" class="text-sm text-slate-500 hover:text-slate-700">← Kembali</a>
 </div>
 

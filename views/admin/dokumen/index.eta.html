@@ -40,12 +40,28 @@
         <div class="flex items-center gap-3">
           <a href="/baca/<%= d.id %>" target="_blank" rel="noopener"
             class="text-indigo-600 hover:underline text-sm">Baca →</a>
-          <form method="post" action="/admin/dokumen/<%= d.id %>/delete" class="inline"
-            onsubmit="return confirm('Hapus dokumen ini?')">
-            <button type="submit" class="text-red-600 hover:underline text-sm">Hapus</button>
-          </form>
+          <button type="button" onclick="document.getElementById('delete-<%= d.id %>').showModal()"
+            class="text-red-600 hover:underline text-sm">Hapus</button>
+          <dialog id="delete-<%= d.id %>" class="rounded-xl p-0 backdrop:bg-slate-900/40">
+            <form method="post" action="/admin/dokumen/<%= d.id %>/delete" class="w-80 p-6 space-y-3">
+              <h2 class="font-bold">Hapus dokumen?</h2>
+              <p class="text-sm text-slate-500"><%= d.nama %></p>
+              <div class="space-y-2">
+                <button name="mode" value="soft"
+                  class="w-full bg-amber-500 text-white font-semibold py-2 rounded-lg hover:bg-amber-600">Pindahkan ke Trash</button>
+                <button type="submit" formaction="/admin/dokumen/<%= d.id %>/trash-and-delete"
+                  class="w-full bg-red-600 text-white font-semibold py-2 rounded-lg hover:bg-red-700">Hapus Permanen</button>
+                <button type="button" onclick="this.closest('dialog').close()"
+                  class="w-full border border-slate-300 font-semibold py-2 rounded-lg hover:bg-slate-100">Batal</button>
+              </div>
+            </form>
+          </dialog>
         </div>
       </div>
     <% }) %>
   </div>
 <% } %>
+
+<div class="mt-8 text-center">
+  <a href="/admin/dokumen/trash" class="text-indigo-600 hover:underline text-sm">Lihat trash →</a>
+</div>

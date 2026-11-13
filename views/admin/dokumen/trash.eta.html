@@ -1,0 +1,35 @@
+<% layout("/layouts/admin") %>
+<% it.title = "Trash — Dider Admin" %>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">Trash</h1>
+  <a href="/admin/dokumen" class="text-indigo-600 hover:underline text-sm">← Kembali ke dokumen</a>
+</div>
+
+<% if (it.dokumen.length === 0) { %>
+  <p class="text-slate-500">Trash kosong.</p>
+<% } else { %>
+  <div class="grid gap-4">
+    <% it.dokumen.forEach(function (d) { %>
+      <div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <p class="font-semibold"><%= d.nama %>
+            <% if (d.missing) { %>
+              <span class="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">File hilang — upload ulang</span>
+            <% } %>
+          </p>
+          <p class="text-xs text-slate-400">Dihapus <%= d.deleted_at %></p>
+        </div>
+        <div class="flex items-center gap-3">
+          <form method="post" action="/admin/dokumen/<%= d.id %>/restore" class="inline">
+            <button type="submit" class="text-emerald-600 hover:underline text-sm">Pulihkan</button>
+          </form>
+          <form method="post" action="/admin/dokumen/<%= d.id %>/hard-delete" class="inline"
+            onsubmit="return confirm('Hapus permanen dokumen ini?')">
+            <button type="submit" class="text-red-600 hover:underline text-sm">Hapus Permanen</button>
+          </form>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+<% } %>

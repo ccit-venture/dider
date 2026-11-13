@@ -14,6 +14,19 @@ const eta = new Eta({
 
 export type Flash = { type: "success" | "error"; message: string } | null;
 
+const BULAN_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+/** Format tanggal SQLite ("YYYY-MM-DD HH:MM:SS", UTC) → "13 November 2026". */
+export function formatTanggal(value: string | null | undefined): string {
+  if (!value) return "-";
+  const d = new Date(value.replace(" ", "T") + "Z");
+  if (isNaN(d.getTime())) return value;
+  return `${d.getDate()} ${BULAN_ID[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 /** Render template Eta → response HTML. Analog `return view(...)` di Laravel. */
 export function view(
   c: Context,
@@ -27,6 +40,7 @@ export function view(
       user,
       flash,
       path: c.req.path,
+      formatTanggal,
       ...data,
     })
   );

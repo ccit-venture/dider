@@ -14,7 +14,7 @@ export function web(db: Db) {
 
   app.route("/", pageController(db)); // homepage
   app.route("/admin", authController(db)); // /admin/login, /admin/register, /admin/logout
-  app.route("/admin", projectController(db)); // /admin/editor*
+  app.route("/admin", projectController(db)); // /admin/dokumen, /admin/dokumen/trash
 
   return app;
 }
